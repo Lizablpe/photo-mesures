@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Photo EINS</title>
+<title>Terrain EINS</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Photo EINS">
+<meta name="apple-mobile-web-app-title" content="Terrain EINS">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f5f3ef">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -69,8 +69,16 @@
     font: inherit; font-size: 20px; line-height: 1; padding: 6px 8px;
     border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text);
   }
+  .ligneSource { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
+  .ficheBtn {
+    font: inherit; font-size: 15px; font-weight: 600; padding: 8px 14px; border-radius: 10px;
+    border: 1px solid var(--err); background: var(--surface); color: var(--text);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .ficheBtn.fait { border-color: var(--ok); }
+  .ficheBtn .badge { margin: 0; }
   .source {
-    display: grid; grid-template-columns: 1fr 1fr; margin-top: 10px;
+    display: grid; grid-template-columns: 1fr 1fr;
     border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
   }
   .source button {
@@ -207,15 +215,18 @@
 <body>
 <header>
   <div class="titre">
-    <h1>Photo EINS</h1>
+    <h1>Terrain EINS</h1>
     <div class="droite">
       <span class="compteur" id="compteur">0 photo envoyée</span>
       <button type="button" class="reglagesBtn" id="ouvrirReglages" aria-label="Réglages">⚙︎</button>
     </div>
   </div>
-  <div class="source" role="group" aria-label="Source de la photo">
-    <button type="button" id="srcCamera" aria-pressed="true">Appareil photo</button>
-    <button type="button" id="srcGalerie" aria-pressed="false">Galerie</button>
+  <div class="ligneSource">
+    <div class="source" role="group" aria-label="Source de la photo">
+      <button type="button" id="srcCamera" aria-pressed="true">Appareil photo</button>
+      <button type="button" id="srcGalerie" aria-pressed="false">Galerie</button>
+    </div>
+    <button type="button" class="ficheBtn" id="ouvrirFiche">✎ Fiche <span class="badge" id="badgeFiche"></span></button>
   </div>
   <div class="chantier">
     <span><span id="depuis">Aucun chantier</span> <span id="reseau" class="horsReseau"></span></span>
@@ -226,10 +237,6 @@
 <main>
   <div id="types"></div>
 
-  <h2>Fiche terrain</h2>
-  <button type="button" class="type shazam" id="ouvrirFiche">
-    <span class="code">✎</span><span class="libelle">Remplir la fiche du chantier</span><span class="badge" id="badgeFiche"></span>
-  </button>
   <p class="vide" id="ficheInfo"></p>
 
   <h2>Musique</h2>
@@ -248,7 +255,7 @@
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
-  <p class="version">Version 7 (fiche terrain et contrôle)</p>
+  <p class="version">Version 8 – Terrain EINS (fiche en haut, plan)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -336,6 +343,7 @@
       { id: 'ampli-2', code: 'A2', libelle: 'Ampli 2', demande: 'modele' }
     ]},
     { section: 'Divers', items: [
+      { id: 'plan', code: 'PL', libelle: 'Plan (avec les points)' },
       { id: 'facade', code: 'F', libelle: 'Façade' },
       { id: 'autre', code: '…', libelle: 'Autre', demande: 'desc' }
     ]}
@@ -1013,6 +1021,7 @@
       ['Photo du point défavorable n°1', a('P1-defavorable'), true],
       ['Photo d’au moins une enceinte ou un caisson', ['enceinte-1', 'enceinte-2', 'enceinte-3', 'enceinte-4', 'caisson-1', 'caisson-2'].some(a), true],
       ['Photo de la table de mixage', a('table-mixage'), false],
+      ['Plan avec les enceintes et les points', a('plan'), true],
       ['Photo du point limiteur (si limiteur à prévoir)', a('P2-limiteur'), false],
       ['Photo de la façade (page de garde)', a('facade'), false],
       ['Musiques reconnues', !!(etat.musiques && etat.musiques.length), true],
