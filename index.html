@@ -195,6 +195,33 @@
   .cache { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
   /* ---------- Fiche terrain et contrôle ---------- */
+  .feuilleTete { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+    position: sticky; top: -18px; background: var(--surface); padding: 18px 0 6px; margin-top: -18px; z-index: 1; }
+  .croix { flex: none; font: inherit; font-size: 22px; line-height: 1; width: 40px; height: 40px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  .groupeTete { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .masquer { font: inherit; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: var(--muted); }
+  .reafficher { display: none; width: 100%; margin: 12px 0 0; font: inherit; font-size: 14px; padding: 10px;
+    border-radius: 10px; border: 1px dashed var(--line); background: transparent; color: var(--muted); }
+  .reafficher.visible { display: block; }
+  ul.envois img { cursor: zoom-in; }
+  .vider { width: 100%; margin: 18px 0 0; font: inherit; font-weight: 600; padding: 12px; border-radius: 12px;
+    border: 1px solid var(--err); background: transparent; color: var(--err); }
+  .feuille .noteVider { margin: 6px 0 0; font-size: 13px; }
+  .listeProjets { margin: 16px 0 0; }
+  .listeProjets h4 { margin: 0 0 6px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .listeProjets button { display: flex; justify-content: space-between; width: 100%; font: inherit; font-size: 16px;
+    text-align: left; padding: 12px; margin: 0 0 8px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--text); }
+  .listeProjets button span { color: var(--muted); font-size: 14px; }
+  .visionneuse { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.92); display: none;
+    flex-direction: column; align-items: center; justify-content: center; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+  .visionneuse.ouvert { display: flex; }
+  .visionneuse img { max-width: 100%; max-height: 82vh; object-fit: contain; }
+  .visionneuse p { color: #fff; font-size: 14px; margin: 10px 12px 0; text-align: center; overflow-wrap: anywhere; }
+  .visionneuse .croix { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 12px;
+    background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.4); }
   .feuille.haute { max-height: 92vh; overflow-y: auto; }
   .champFiche { margin: 14px 0 0; }
   .champFiche label { display: block; font-weight: 600; font-size: 15px; margin-bottom: 6px; }
@@ -230,7 +257,7 @@
   </div>
   <div class="chantier">
     <span><span id="depuis">Aucun chantier</span> <span id="reseau" class="horsReseau"></span></span>
-    <button type="button" id="nouveauChantier">Nouveau chantier</button>
+    <button type="button" id="nouveauChantier">Changer de chantier</button>
   </div>
 </header>
 
@@ -255,7 +282,8 @@
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
-  <p class="version">Version 8 – Terrain EINS (fiche en haut, plan)</p>
+  <button type="button" class="reafficher" id="reafficher"></button>
+  <p class="version">Version 10 – Terrain EINS (calibration, effacement des photos)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -274,13 +302,14 @@
 <!-- Nouveau chantier : nom du projet -->
 <div class="voile" id="voileProjet">
   <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="projetTitre">
-    <h3 id="projetTitre">Nouveau chantier</h3>
+    <div class="feuilleTete"><h3 id="projetTitre">Chantier</h3><button type="button" class="croix" id="projetCroix" aria-label="Fermer">×</button></div>
     <p>Nom du projet (ex. Tetou Juan-les-Pins). Les photos seront rangées dans un dossier à ce nom.</p>
     <input id="champProjet" type="text" autocomplete="off" autocapitalize="words" enterkeyhint="done">
     <div class="actions">
       <button type="button" class="annuler" id="projetPasser">Sans projet</button>
       <button type="button" class="valider" id="projetValider">Commencer</button>
     </div>
+    <div class="listeProjets" id="listeProjets"></div>
   </div>
 </div>
 
@@ -295,13 +324,15 @@
       <button type="button" class="annuler" id="reglagesFermer">Fermer</button>
       <button type="button" class="valider" id="reglagesEnregistrer">Enregistrer et tester</button>
     </div>
+    <button type="button" class="vider" id="viderPhotos">Effacer de l’appli toutes les photos envoyées</button>
+    <p class="noteVider">Les photos restent dans le Drive et dans Photos. Celles pas encore envoyées sont gardées.</p>
   </div>
 </div>
 
 <!-- Fiche terrain -->
 <div class="voile" id="voileFiche">
   <div class="feuille haute" role="dialog" aria-modal="true" aria-labelledby="ficheTitre">
-    <h3 id="ficheTitre">Fiche terrain</h3>
+    <div class="feuilleTete"><h3 id="ficheTitre">Fiche terrain</h3><button type="button" class="croix" id="ficheCroix" aria-label="Fermer">×</button></div>
     <p id="ficheAide">Les réponses sont gardées sur le téléphone, puis envoyées dans le dossier du chantier sur le Drive.</p>
     <div id="ficheChamps"></div>
     <p class="message" id="ficheMessage"></p>
@@ -311,6 +342,8 @@
     </div>
   </div>
 </div>
+
+<div class="visionneuse" id="visionneuse"><button type="button" class="croix" id="visionCroix" aria-label="Fermer">×</button><img id="visionImg" alt=""><p id="visionNom"></p></div>
 
 <input class="cache" type="file" id="inCamera" accept="image/*" capture="environment">
 <input class="cache" type="file" id="inGalerie" accept="image/*">
@@ -329,6 +362,10 @@
       { id: 'P1-defavorable-4', code: 'P1', libelle: 'Défavorable 4' },
       { id: 'micro-limiteur', code: 'M', libelle: 'Micro du limiteur' }
     ]},
+    { section: 'Calibration', items: [
+      { id: 'calibration-avant', code: 'CA', libelle: 'Calibration avant' },
+      { id: 'calibration-apres', code: 'CP', libelle: 'Calibration après' }
+    ]},
     { section: 'Sources', items: [
       { id: 'enceinte-1', code: 'E1', libelle: 'Enceinte 1', demande: 'modele' },
       { id: 'enceinte-2', code: 'E2', libelle: 'Enceinte 2', demande: 'modele' },
@@ -344,7 +381,6 @@
     ]},
     { section: 'Divers', items: [
       { id: 'plan', code: 'PL', libelle: 'Plan (avec les points)' },
-      { id: 'facade', code: 'F', libelle: 'Façade' },
       { id: 'autre', code: '…', libelle: 'Autre', demande: 'desc' }
     ]}
   ];
@@ -403,7 +439,7 @@
     return {
       mettre: (p) => op('readwrite', (st) => st.put({
         nom: p.nom, jour: p.jour, statut: p.statut, b64: p.b64,
-        vignette: p.vignette, cree: p.cree, erreur: p.erreur, galerie: !!p.galerie,
+        vignette: p.vignette, apercu: p.apercu || '', masque: !!p.masque, cree: p.cree, erreur: p.erreur, galerie: !!p.galerie,
         dossier: p.dossier || '', projet: p.projet || ''
       })).catch(() => {}),
       retirer: (nom) => op('readwrite', (st) => st.delete(nom)).catch(() => {}),
@@ -564,6 +600,7 @@
       const r = await preparer(fichier);
       photo.b64 = r.b64;
       photo.vignette = r.vignette;
+      photo.apercu = r.apercu;
       photo.statut = 'attente';
       await Base.mettre(photo);          // gardée sur le téléphone avant tout envoi
     } catch (err) {
@@ -589,8 +626,9 @@
         };
         const b64 = dessiner(2560, 0.85).split(',')[1];
         const vignette = dessiner(160, 0.6);
+        const apercu = dessiner(1200, 0.7);
         URL.revokeObjectURL(url);
-        ok({ b64: b64, vignette: vignette });
+        ok({ b64: b64, vignette: vignette, apercu: apercu });
       };
       img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('illisible')); };
       img.src = url;
@@ -811,12 +849,15 @@
 
   function projetActif() {
     // Un projet vaut pour une journée de chantier (6 h → 6 h) : le lendemain, on redemande.
-    return etat.projet && etat.projet.jour === jourChantierMaintenant() ? etat.projet : null;
+    // Un projet repris depuis la liste vaut pour la journée où il a été repris.
+    const j = etat.projet && (etat.projet.actif || etat.projet.jour);
+    return j === jourChantierMaintenant() ? etat.projet : null;
   }
 
   function ouvrirProjet(apres) {
     etat.apresProjet = apres || null;
     $('champProjet').value = '';
+    construireListeProjets();
     $('voileProjet').classList.add('ouvert');
     setTimeout(() => $('champProjet').focus(), 50);
   }
@@ -840,10 +881,55 @@
     // Dossier Drive : « Nom du projet_AAAA-MM-JJ_HHmm » (journée de chantier + heure de début)
     etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm };
     ecrire('photoEins.projet', etat.projet);
+    memoriserProjet(etat.projet);
     fermerProjet();
   }
 
+  function projetsConnus() {
+    const liste = (lire('photoEins.projets', []) || []).slice();
+    const ajouter = (p) => { if (p && p.dossier && !liste.some((x) => x.dossier === p.dossier)) liste.push({ nom: p.nom, jour: p.jour, dossier: p.dossier }); };
+    if (etat.projet) ajouter(etat.projet);
+    etat.photos.forEach((p) => {
+      if (!p.dossier) return;
+      const m = p.dossier.match(/(\d{4}-\d{2}-\d{2})/);
+      ajouter({ nom: p.projet || p.dossier, jour: m ? m[1] : '', dossier: p.dossier });
+    });
+    return liste.sort((a, b) => b.dossier.slice(-15).localeCompare(a.dossier.slice(-15)) || b.jour.localeCompare(a.jour)).slice(0, 20);
+  }
+  function memoriserProjet(p) {
+    const liste = projetsConnus().filter((x) => x.dossier !== p.dossier);
+    liste.unshift({ nom: p.nom, jour: p.jour, dossier: p.dossier });
+    ecrire('photoEins.projets', liste.slice(0, 20));
+  }
+  function construireListeProjets() {
+    const div = $('listeProjets');
+    div.innerHTML = '';
+    const actuel = projetActif();
+    const autres = projetsConnus().filter((p) => !actuel || p.dossier !== actuel.dossier);
+    if (!autres.length) return;
+    const h = document.createElement('h4');
+    h.textContent = 'Reprendre un chantier';
+    div.appendChild(h);
+    autres.forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const m = (p.jour || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+      b.textContent = p.nom;
+      const d = document.createElement('span');
+      d.textContent = m ? m[3] + '/' + m[2] : '';
+      b.appendChild(d);
+      b.addEventListener('click', () => {
+        etat.projet = { nom: p.nom, jour: p.jour, dossier: p.dossier, actif: jourChantierMaintenant() };
+        ecrire('photoEins.projet', etat.projet);
+        memoriserProjet(etat.projet);
+        fermerProjet();
+      });
+      div.appendChild(b);
+    });
+  }
+
   $('nouveauChantier').addEventListener('click', () => ouvrirProjet(null));
+  $('projetCroix').addEventListener('click', () => { etat.apresProjet = null; $('voileProjet').classList.remove('ouvert'); });
   $('projetValider').addEventListener('click', validerProjet);
   $('champProjet').addEventListener('keydown', (e) => { if (e.key === 'Enter') validerProjet(); });
   $('projetPasser').addEventListener('click', () => {
@@ -905,13 +991,12 @@
   /* ---------- Fiche terrain (envoyée dans le dossier du chantier : fiche_terrain.json) ---------- */
   const CHAMPS_FICHE = [
     { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'ex. 22h00-00h00', requis: true },
-    { id: 'lieu', libelle: 'Lieu', type: 'choix', options: ['clos', 'ouvert'], requis: true },
+    { id: 'lieu', libelle: 'Lieu (plusieurs choix possibles si plusieurs zones)', type: 'multi', options: ['clos', 'ouvert'], requis: true },
     { id: 'portes', libelle: 'Portes pendant la diffusion', type: 'choix', options: ['fermées', 'ouvertes'], requis: true },
     { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
     { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
     { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', requis: true },
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
-    { id: 'type_fenetre', libelle: 'Type d’ouverture', type: 'choix', options: ['fenêtre', 'porte-fenêtre'] },
     { id: 'audible', libelle: 'Musique audible chez le voisin ?', type: 'choix', options: ['oui', 'non'], requis: true },
     { id: 'sono', libelle: 'Sonorisation', type: 'choix', options: ['fixe', 'matériel DJ / musiciens', 'les deux'], requis: true },
     { id: 'zones', libelle: 'Nombre de zones sonorisées', type: 'nombre', requis: true },
@@ -935,7 +1020,26 @@
       const lab = document.createElement('label');
       lab.textContent = c.libelle + (c.requis ? ' *' : '');
       bloc.appendChild(lab);
-      if (c.type === 'choix') {
+      if (c.type === 'multi') {
+        // Valeur enregistrée : « clos », « ouvert » ou « clos, ouvert » (ordre des options)
+        const puces = document.createElement('div');
+        puces.className = 'puces';
+        const choisis = () => String(etat.fiche[c.id] || '').split(',').map((x) => x.trim()).filter(Boolean);
+        c.options.forEach((o) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = o;
+          b.setAttribute('aria-pressed', choisis().includes(o));
+          b.addEventListener('click', () => {
+            const sel = choisis();
+            const nv = sel.includes(o) ? sel.filter((x) => x !== o) : sel.concat(o);
+            etat.fiche[c.id] = c.options.filter((x) => nv.includes(x)).join(', ');
+            b.setAttribute('aria-pressed', nv.includes(o));
+          });
+          puces.appendChild(b);
+        });
+        bloc.appendChild(puces);
+      } else if (c.type === 'choix') {
         const puces = document.createElement('div');
         puces.className = 'puces';
         c.options.forEach((o) => {
@@ -975,7 +1079,21 @@
     construireFiche();
     $('voileFiche').classList.add('ouvert');
   });
-  $('ficheFermer').addEventListener('click', () => $('voileFiche').classList.remove('ouvert'));
+  function fermerFiche() {
+    $('voileFiche').classList.remove('ouvert');
+    const cle = cleFiche();
+    const avant = JSON.stringify(lire('photoEins.fiche.' + cle, {}) || {});
+    const { maj, ...sansMaj } = etat.fiche;
+    const { maj: m2, ...avantSansMaj } = JSON.parse(avant);
+    if (JSON.stringify(sansMaj) === JSON.stringify(avantSansMaj)) return;   // rien de changé
+    etat.fiche.maj = new Date().toISOString();
+    ecrire('photoEins.fiche.' + cle, etat.fiche);
+    ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
+    envoyerFiches().then(afficher);
+    afficher();
+  }
+  $('ficheFermer').addEventListener('click', fermerFiche);
+  $('ficheCroix').addEventListener('click', fermerFiche);
   $('ficheEnregistrer').addEventListener('click', async () => {
     const cle = cleFiche();
     etat.fiche.maj = new Date().toISOString();
@@ -1023,7 +1141,8 @@
       ['Photo de la table de mixage', a('table-mixage'), false],
       ['Plan avec les enceintes et les points', a('plan'), true],
       ['Photo du point limiteur (si limiteur à prévoir)', a('P2-limiteur'), false],
-      ['Photo de la façade (page de garde)', a('facade'), false],
+      ['Photo de la calibration avant mesures', a('calibration-avant'), true],
+      ['Photo de la calibration après mesures', a('calibration-apres'), true],
       ['Musiques reconnues', !!(etat.musiques && etat.musiques.length), true],
       ['Fiche terrain remplie', ficheRemplie(), true]
     ];
@@ -1056,6 +1175,7 @@
     majCompteurs();
     const aujourdhui = jour();
     const visibles = etat.photos
+      .filter((p) => !(p.masque && p.statut === 'ok'))
       .filter((p) => p.jour === aujourdhui || p.statut !== 'ok' || (p.b64 && !p.galerie))
       .sort((a, b) => b.cree - a.cree);
 
@@ -1076,15 +1196,31 @@
     groupes.forEach((g) => {
       const m = g.cle.match(/(\d{4})-(\d{2})-(\d{2})/);
       const date = m ? ' (' + m[3] + '/' + m[2] + ')' : '';
-      ordonnees.push({ titre: g.cle ? (g.p.projet || g.cle) + date : 'Sans projet' });
+      ordonnees.push({ titre: g.cle ? (g.p.projet || g.cle) + date : 'Sans projet', cle: g.cle });
       g.photos.forEach((p) => ordonnees.push(p));
     });
 
     ordonnees.forEach((p) => {
       if (p.titre) {
         const t = document.createElement('li');
-        t.className = 'groupe';
-        t.textContent = p.titre;
+        t.className = 'groupe groupeTete';
+        const nomG = document.createElement('span');
+        nomG.textContent = p.titre;
+        t.appendChild(nomG);
+        const envoyeesG = etat.photos.filter((x) => (x.dossier || '') === p.cle && x.statut === 'ok' && !x.masque);
+        if (envoyeesG.length) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'masquer';
+          b.textContent = 'Masquer';
+          b.addEventListener('click', async () => {
+            const n = envoyeesG.length;
+            if (!confirm('Masquer ' + n + (n > 1 ? ' photos envoyées' : ' photo envoyée') + ' de « ' + p.titre + ' » dans l’appli ?\n\nElles restent dans le Drive et dans Photos. Les photos pas encore envoyées restent affichées.')) return;
+            for (const x of envoyeesG) { x.masque = true; await Base.mettre(x); }
+            afficher();
+          });
+          t.appendChild(b);
+        }
         liste.appendChild(t);
         return;
       }
@@ -1092,6 +1228,7 @@
       const img = document.createElement('img');
       img.alt = '';
       if (p.vignette) img.src = p.vignette;
+      img.addEventListener('click', () => ouvrirVisionneuse(p));
       const nom = document.createElement('span');
       nom.className = 'nom';
       nom.textContent = p.nom;
@@ -1121,6 +1258,9 @@
       liste.appendChild(li);
     });
     $('vide').style.display = visibles.length ? 'none' : 'block';
+    const nbMasquees = etat.photos.filter((p) => p.masque).length;
+    $('reafficher').textContent = 'Réafficher les photos masquées (' + nbMasquees + ')';
+    $('reafficher').classList.toggle('visible', nbMasquees > 0);
 
     const envoyees = etat.photos.filter((p) => p.jour === aujourdhui && p.statut === 'ok').length;
     $('compteur').textContent = envoyees + (envoyees > 1 ? ' photos envoyées' : ' photo envoyée');
@@ -1149,6 +1289,36 @@
       bandeau.classList.remove('visible');
     }
   }
+
+  /* ---------- Visionneuse et photos masquées ---------- */
+  function ouvrirVisionneuse(p) {
+    const src = p.apercu || (p.b64 ? 'data:image/jpeg;base64,' + p.b64 : p.vignette);
+    if (!src) return;
+    $('visionImg').src = src;
+    $('visionNom').textContent = p.nom + (p.apercu || p.b64 ? '' : ' (aperçu réduit : la photo complète est dans le Drive)');
+    $('visionneuse').classList.add('ouvert');
+  }
+  function fermerVisionneuse() { $('visionneuse').classList.remove('ouvert'); $('visionImg').src = ''; }
+  $('visionCroix').addEventListener('click', fermerVisionneuse);
+  $('visionneuse').addEventListener('click', (e) => { if (e.target.id === 'visionneuse') fermerVisionneuse(); });
+  $('viderPhotos').addEventListener('click', async () => {
+    const envoyees = etat.photos.filter((p) => p.statut === 'ok');
+    if (!envoyees.length) { alert('Aucune photo envoyée à effacer.'); return; }
+    const pasDansPhotos = envoyees.filter((p) => p.b64 && !p.galerie).length;
+    let texte = 'Effacer de l’appli les ' + envoyees.length + ' photos envoyées ?\n\nElles restent dans le Drive et dans Photos.';
+    if (pasDansPhotos) texte += pasDansPhotos > 1
+      ? '\n\nAttention : ' + pasDansPhotos + ' photos ne sont pas encore enregistrées dans Photos et ne pourront plus l’être depuis l’appli (elles resteront dans le Drive).'
+      : '\n\nAttention : 1 photo n’est pas encore enregistrée dans Photos et ne pourra plus l’être depuis l’appli (elle restera dans le Drive).';
+    if (!confirm(texte)) return;
+    for (const p of envoyees) await Base.retirer(p.nom);
+    etat.photos = etat.photos.filter((p) => p.statut !== 'ok');
+    $('voileReglages').classList.remove('ouvert');
+    afficher();
+  });
+  $('reafficher').addEventListener('click', async () => {
+    for (const x of etat.photos.filter((p) => p.masque)) { x.masque = false; await Base.mettre(x); }
+    afficher();
+  });
 
   /* ---------- Démarrage ---------- */
   (async function demarrer() {
