@@ -749,9 +749,9 @@
     const enAttente = etat.photos.filter((p) => p.statut !== 'ok').length;
     const bandeau = $('attente');
     if (enAttente) {
-      bandeau.textContent = enAttente + (enAttente > 1 ? ' photos pas encore dans le Drive. Elles sont gardées'
-        : ' photo pas encore dans le Drive. Elle est gardée') +
-        ' sur le téléphone et partira dès que le réseau revient, quand l\'appli est ouverte.';
+      bandeau.textContent = enAttente > 1
+        ? enAttente + ' photos pas encore dans le Drive. Elles sont gardées sur le téléphone et partiront dès que le réseau revient, quand l\'appli est ouverte.'
+        : '1 photo pas encore dans le Drive. Elle est gardée sur le téléphone et partira dès que le réseau revient, quand l\'appli est ouverte.';
       bandeau.classList.add('visible');
     } else {
       bandeau.classList.remove('visible');
