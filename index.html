@@ -283,7 +283,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 10 – Terrain EINS (calibration, effacement des photos)</p>
+  <p class="version">Version 10.1 – Terrain EINS (calibration, effacement des photos)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -1310,6 +1310,7 @@
       ? '\n\nAttention : ' + pasDansPhotos + ' photos ne sont pas encore enregistrées dans Photos et ne pourront plus l’être depuis l’appli (elles resteront dans le Drive).'
       : '\n\nAttention : 1 photo n’est pas encore enregistrée dans Photos et ne pourra plus l’être depuis l’appli (elle restera dans le Drive).';
     if (!confirm(texte)) return;
+    ecrire('photoEins.projets', projetsConnus());
     for (const p of envoyees) await Base.retirer(p.nom);
     etat.photos = etat.photos.filter((p) => p.statut !== 'ok');
     $('voileReglages').classList.remove('ouvert');
@@ -1342,6 +1343,7 @@
       etat.nomsUtilises.add(sansExt(p.nom));
     }
 
+    ecrire('photoEins.projets', projetsConnus());   // les chantiers restent dans la liste même après effacement des photos
     afficher();
     afficherMusiques();
     if (!etat.config) { ouvrirReglages(); return; }
