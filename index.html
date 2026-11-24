@@ -210,6 +210,12 @@
     border: 1px solid var(--err); background: transparent; color: var(--err); }
   .feuille .noteVider { margin: 6px 0 0; font-size: 13px; }
   .listeProjets { margin: 16px 0 0; }
+  .gpsLigne { display: flex; gap: 8px; align-items: center; }
+  .gpsLigne input { flex: 1; }
+  .gpsBtn { flex: none; font: inherit; font-size: 15px; font-weight: 600; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--primary); background: var(--surface); color: var(--text); white-space: nowrap; }
+  .aideChamp { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .listeProjets .crmVide { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
   .listeProjets h4 { margin: 0 0 6px; font-size: 15px; color: var(--muted); font-weight: 600; }
   .listeProjets button { display: flex; justify-content: space-between; width: 100%; font: inherit; font-size: 16px;
     text-align: left; padding: 12px; margin: 0 0 8px; border-radius: 10px; border: 1px solid var(--line);
@@ -283,7 +289,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 10.1 – Terrain EINS (calibration, effacement des photos)</p>
+  <p class="version">Version 11 – Terrain EINS (GPS, zones close / ouverte, affaires du CRM)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -303,7 +309,7 @@
 <div class="voile" id="voileProjet">
   <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="projetTitre">
     <div class="feuilleTete"><h3 id="projetTitre">Chantier</h3><button type="button" class="croix" id="projetCroix" aria-label="Fermer">×</button></div>
-    <p>Nom du projet (ex. Tetou Juan-les-Pins). Les photos seront rangées dans un dossier à ce nom.</p>
+    <p>Choisis l’affaire du CRM plus bas, ou tape un nom (ex. Tetou Juan-les-Pins). Les photos seront rangées dans un dossier à ce nom.</p>
     <input id="champProjet" type="text" autocomplete="off" autocapitalize="words" enterkeyhint="done">
     <div class="actions">
       <button type="button" class="annuler" id="projetPasser">Sans projet</button>
@@ -603,6 +609,9 @@
       photo.apercu = r.apercu;
       photo.statut = 'attente';
       await Base.mettre(photo);          // gardée sur le téléphone avant tout envoi
+      const cleF = photo.dossier || jourChantierMaintenant();
+      if (choix.type.id === 'voisin') enregistrerPosition('gps_voisin', cleF, true);
+      else if (/^(P1-defavorable|P2-limiteur)/.test(choix.type.id)) enregistrerPosition('gps_etablissement', cleF, true);
     } catch (err) {
       photo.statut = 'echec';
       photo.erreur = 'photo illisible, reprends-la';
@@ -858,6 +867,7 @@
     etat.apresProjet = apres || null;
     $('champProjet').value = '';
     construireListeProjets();
+    chargerAffaires();
     $('voileProjet').classList.add('ouvert');
     setTimeout(() => $('champProjet').focus(), 50);
   }
@@ -901,9 +911,60 @@
     liste.unshift({ nom: p.nom, jour: p.jour, dossier: p.dossier });
     ecrire('photoEins.projets', liste.slice(0, 20));
   }
+  async function chargerAffaires() {
+    if (!etat.config || navigator.onLine === false) return;
+    try {
+      const u = etat.config.url + '?action=affaires&k=' + encodeURIComponent(etat.config.cle);
+      const r = await fetch(u, { redirect: 'follow' });
+      const j = await r.json();
+      if (Array.isArray(j)) { ecrire('photoEins.affaires', j); if ($('voileProjet').classList.contains('ouvert')) construireListeProjets(); }
+    } catch (e) {}
+  }
+  function creerDepuisAffaire(a) {
+    const nom = String(a.nom || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!nom) return;
+    const j = jourChantierMaintenant();
+    const maintenant = new Date();
+    const hhmm = deux(maintenant.getHours()) + deux(maintenant.getMinutes());
+    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm, crm: a.url || '' };
+    ecrire('photoEins.projet', etat.projet);
+    memoriserProjet(etat.projet);
+    // Lien vers l'affaire du CRM, enregistré dans la fiche (envoyé avec elle)
+    const f = lire('photoEins.fiche.' + etat.projet.dossier, {}) || {};
+    f.affaire_crm = a.url || '';
+    f.affaire_nom = a.nom || '';
+    if (a.date) f.affaire_date_intervention = a.date;
+    ecrire('photoEins.fiche.' + etat.projet.dossier, f);
+    fermerProjet();
+  }
   function construireListeProjets() {
     const div = $('listeProjets');
     div.innerHTML = '';
+    const affaires = lire('photoEins.affaires', null);
+    const dejaPris = new Set(projetsConnus().map((p) => p.nom));
+    if (Array.isArray(affaires)) {
+      const h = document.createElement('h4');
+      h.textContent = 'Affaires gagnées (CRM)';
+      div.appendChild(h);
+      const libres = affaires.filter((a) => !dejaPris.has(String(a.nom || '').trim()));
+      if (!libres.length) {
+        const v = document.createElement('p');
+        v.className = 'crmVide';
+        v.textContent = 'Aucune nouvelle affaire « Gagné » dans le CRM.';
+        div.appendChild(v);
+      }
+      libres.forEach((a) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = a.nom;
+        const d = document.createElement('span');
+        const m = String(a.date || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+        d.textContent = (a.lieu ? a.lieu + ' · ' : '') + (m ? m[3] + '/' + m[2] : 'date ?');
+        b.appendChild(d);
+        b.addEventListener('click', () => creerDepuisAffaire(a));
+        div.appendChild(b);
+      });
+    }
     const actuel = projetActif();
     const autres = projetsConnus().filter((p) => !actuel || p.dossier !== actuel.dossier);
     if (!autres.length) return;
@@ -992,9 +1053,13 @@
   const CHAMPS_FICHE = [
     { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'ex. 22h00-00h00', requis: true },
     { id: 'lieu', libelle: 'Lieu (plusieurs choix possibles si plusieurs zones)', type: 'multi', options: ['clos', 'ouvert'], requis: true },
+    { id: 'zone_close', libelle: 'Zone close', type: 'texte', aide: 'ex. salle intérieure', requis: true, si: (f) => lieuMixte(f) },
+    { id: 'zone_ouverte', libelle: 'Zone ouverte', type: 'texte', aide: 'ex. terrasse, jardin', requis: true, si: (f) => lieuMixte(f) },
     { id: 'portes', libelle: 'Portes pendant la diffusion', type: 'choix', options: ['fermées', 'ouvertes'], requis: true },
     { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
     { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
+    { id: 'gps_voisin', libelle: 'Position GPS du voisin', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin, ou touche « Ici » sur place' },
+    { id: 'gps_etablissement', libelle: 'Position GPS de l’établissement', type: 'gps', aide: 'Enregistrée seule avec la 1re photo Défavorable ou Limiteur, ou touche « Ici »' },
     { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', requis: true },
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
     { id: 'audible', libelle: 'Musique audible chez le voisin ?', type: 'choix', options: ['oui', 'non'], requis: true },
@@ -1009,12 +1074,50 @@
 
   function cleFiche() { const p = projetActif(); return p ? p.dossier : jourChantierMaintenant(); }
   function chargerFiche() { etat.fiche = lire('photoEins.fiche.' + cleFiche(), {}) || {}; }
-  function ficheRemplie() { return CHAMPS_FICHE.filter((c) => c.requis).every((c) => String(etat.fiche[c.id] || '').trim()); }
+  function lieuMixte(f) { const l = String((f || {}).lieu || ''); return l.includes('clos') && l.includes('ouvert'); }
+  function champVisible(c) { return !c.si || c.si(etat.fiche); }
+  function ficheRemplie() { return CHAMPS_FICHE.filter((c) => c.requis && champVisible(c)).every((c) => String(etat.fiche[c.id] || '').trim()); }
+
+  /* ---------- Position GPS (gardée dans la fiche du chantier) ---------- */
+  function distanceGps(a, b) {
+    const m = (t) => String(t || '').match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    const p = m(a), q = m(b);
+    if (!p || !q) return null;
+    const rad = (x) => x * Math.PI / 180, R = 6371000;
+    const dLat = rad(q[1] - p[1]), dLon = rad(q[2] - p[2]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(p[1])) * Math.cos(rad(q[1])) * Math.sin(dLon / 2) ** 2;
+    return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+  }
+  function lirePosition() {
+    return new Promise((ok) => {
+      if (!navigator.geolocation) { ok(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => ok(pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6) + ' (±' + Math.round(pos.coords.accuracy) + ' m)'),
+        () => ok(null),
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+    });
+  }
+  async function enregistrerPosition(champ, cle, seulementSiVide) {
+    const fiche = lire('photoEins.fiche.' + cle, {}) || {};
+    if (seulementSiVide && fiche[champ]) return;
+    const pos = await lirePosition();
+    if (!pos) return null;
+    const f = lire('photoEins.fiche.' + cle, {}) || {};     // relue : la fiche a pu changer pendant la mesure GPS
+    if (seulementSiVide && f[champ]) return;
+    f[champ] = pos;
+    f.maj = new Date().toISOString();
+    ecrire('photoEins.fiche.' + cle, f);
+    ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
+    if (cle === cleFiche() && !$('voileFiche').classList.contains('ouvert')) chargerFiche();
+    envoyerFiches();
+    return pos;
+  }
 
   function construireFiche() {
     const racine = $('ficheChamps');
     racine.innerHTML = '';
     CHAMPS_FICHE.forEach((c) => {
+      if (!champVisible(c)) return;
       const bloc = document.createElement('div');
       bloc.className = 'champFiche';
       const lab = document.createElement('label');
@@ -1035,6 +1138,11 @@
             const nv = sel.includes(o) ? sel.filter((x) => x !== o) : sel.concat(o);
             etat.fiche[c.id] = c.options.filter((x) => nv.includes(x)).join(', ');
             b.setAttribute('aria-pressed', nv.includes(o));
+            if (CHAMPS_FICHE.some((x) => x.si)) {   // affiche ou masque les champs qui dépendent du lieu
+              const haut = $('ficheChamps').closest('.feuille').scrollTop;
+              construireFiche();
+              $('ficheChamps').closest('.feuille').scrollTop = haut;
+            }
           });
           puces.appendChild(b);
         });
@@ -1054,6 +1162,32 @@
           puces.appendChild(b);
         });
         bloc.appendChild(puces);
+      } else if (c.type === 'gps') {
+        const ligne = document.createElement('div');
+        ligne.className = 'gpsLigne';
+        const champ = document.createElement('input');
+        champ.type = 'text';
+        champ.placeholder = 'pas encore enregistrée';
+        champ.value = etat.fiche[c.id] || '';
+        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'gpsBtn';
+        b.textContent = '📍 Ici';
+        b.addEventListener('click', async () => {
+          b.textContent = '…';
+          const pos = await lirePosition();
+          b.textContent = '📍 Ici';
+          if (!pos) { alert('Position introuvable. Autorise la localisation pour Terrain EINS (Réglages de l’iPhone › Confidentialité › Service de localisation).'); return; }
+          champ.value = pos;
+          etat.fiche[c.id] = pos;
+        });
+        ligne.append(champ, b);
+        bloc.appendChild(ligne);
+        const aide = document.createElement('p');
+        aide.className = 'aideChamp';
+        aide.textContent = c.aide || '';
+        bloc.appendChild(aide);
       } else {
         const champ = document.createElement(c.type === 'zone' ? 'textarea' : 'input');
         if (c.type !== 'zone') {
@@ -1061,6 +1195,10 @@
           if (c.type === 'nombre') champ.inputMode = 'numeric';
         }
         champ.placeholder = c.aide || '';
+        if (c.id === 'distance') {
+          const d = distanceGps(etat.fiche.gps_voisin, etat.fiche.gps_etablissement);
+          if (d !== null) champ.placeholder = 'GPS : environ ' + d + ' m';
+        }
         champ.value = etat.fiche[c.id] || '';
         champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
         bloc.appendChild(champ);
