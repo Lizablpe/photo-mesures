@@ -289,7 +289,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 11 – Terrain EINS (GPS, zones close / ouverte, affaires du CRM)</p>
+  <p class="version">Version 11.1 – Terrain EINS (GPS, zones close / ouverte, affaires du CRM)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -917,7 +917,8 @@
       const u = etat.config.url + '?action=affaires&k=' + encodeURIComponent(etat.config.cle);
       const r = await fetch(u, { redirect: 'follow' });
       const j = await r.json();
-      if (Array.isArray(j)) { ecrire('photoEins.affaires', j); if ($('voileProjet').classList.contains('ouvert')) construireListeProjets(); }
+      // Seule une vraie liste d'affaires est gardée (un ancien script peut répondre autre chose à action=affaires)
+      if (Array.isArray(j) && j.every((x) => x && typeof x === 'object' && x.nom)) { ecrire('photoEins.affaires', j); if ($('voileProjet').classList.contains('ouvert')) construireListeProjets(); }
     } catch (e) {}
   }
   function creerDepuisAffaire(a) {
