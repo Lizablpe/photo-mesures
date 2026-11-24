@@ -138,6 +138,12 @@
     border: 1px solid var(--err); background: transparent; color: var(--err);
   }
   .vide { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+  .shazam { width: 100%; }
+  ul.musiques { list-style: none; padding: 0; margin: 8px 0 0; }
+  ul.musiques li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  ul.musiques .heure { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
+  ul.musiques .artiste { color: var(--muted); }
+  .version { margin: 24px 0 0; text-align: center; font-size: 13px; color: var(--muted); }
   .galerieBtn {
     display: none; width: 100%; margin: 16px 0 0;
     font: inherit; font-weight: 600; padding: 14px; border-radius: 12px;
@@ -199,12 +205,20 @@
 <main>
   <div id="types"></div>
 
+  <h2>Musique</h2>
+  <button type="button" class="type shazam" id="lancerShazam">
+    <span class="code">♪</span><span class="libelle">Reconnaître la musique</span><span class="badge" id="badgeMusique"></span>
+  </button>
+  <p class="vide" id="musiquesInfo"></p>
+  <ul class="musiques" id="musiques"></ul>
+
   <div class="attente" id="attente"></div>
   <button type="button" class="galerieBtn" id="versGalerie"></button>
   <p class="noteGalerie" id="noteGalerie">Dans la fenêtre qui s'ouvre, touche « Enregistrer les images ».</p>
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
+  <p class="version">Version 4 (musique Shazam)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -585,10 +599,19 @@
     }
   }
 
-  window.addEventListener('online', () => { pompe(); chargerDrive(); afficher(); });
+  window.addEventListener('online', () => { pompe(); chargerDrive(); chargerMusiques(); afficher(); });
   window.addEventListener('offline', afficher);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { pompe(); chargerDrive(); }
+    if (document.visibilityState !== 'visible') return;
+    pompe();
+    chargerDrive();
+    chargerMusiques();
+    if (etat.attenteShazam) {
+      // Le Google Sheet met quelques secondes à recevoir le titre envoyé par le raccourci.
+      etat.attenteShazam = false;
+      setTimeout(chargerMusiques, 6000);
+      setTimeout(chargerMusiques, 15000);
+    }
   });
   setInterval(pompe, 30000);
 
@@ -626,6 +649,75 @@
     }
     afficher();
   });
+
+  /* ---------- Musique : raccourci Shazam + liste du Google Sheet ---------- */
+  const RACCOURCI_SHAZAM = 'Shazam EINS';   // nom exact du raccourci dans l'app Raccourcis
+  etat.musiques = null;
+  etat.attenteShazam = false;
+
+  function jourChantierMaintenant() {
+    const d = new Date();
+    if (d.getHours() < 6) d.setDate(d.getDate() - 1);   // la nuit compte pour la veille
+    return jour(d);
+  }
+
+  $('lancerShazam').addEventListener('click', () => {
+    if (!etat.config) { ouvrirReglages(); return; }
+    etat.attenteShazam = true;
+    window.location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(RACCOURCI_SHAZAM);
+  });
+
+  async function chargerMusiques() {
+    if (etat.config && navigator.onLine !== false) {
+      try {
+        const u = etat.config.url + '?action=musiques&k=' + encodeURIComponent(etat.config.cle) +
+          '&jour=' + jourChantierMaintenant();
+        const r = await fetch(u, { redirect: 'follow' });
+        const j = await r.json();
+        if (Array.isArray(j)) etat.musiques = j;
+      } catch (e) {}
+    }
+    afficherMusiques();
+  }
+
+  function afficherMusiques() {
+    const liste = $('musiques');
+    const info = $('musiquesInfo');
+    const badge = $('badgeMusique');
+    liste.innerHTML = '';
+    badge.className = 'badge';
+    badge.textContent = '';
+    $('lancerShazam').classList.remove('fait');
+
+    let texte = '';
+    if (!etat.musiques) {
+      texte = navigator.onLine === false ? 'Liste des musiques indisponible hors réseau.' : '';
+    } else if (!etat.musiques.length) {
+      texte = 'Aucune musique reconnue pour cette journée.';
+    } else {
+      badge.classList.add('ok');
+      badge.textContent = '✓ ' + etat.musiques.length;
+      $('lancerShazam').classList.add('fait');
+      etat.musiques.slice().reverse().forEach((m) => {
+        const li = document.createElement('li');
+        const h = document.createElement('span');
+        h.className = 'heure';
+        h.textContent = m.heure;
+        const t = document.createElement('span');
+        t.textContent = m.titre || '(titre vide)';
+        li.append(h, t);
+        if (m.artiste) {
+          const a = document.createElement('span');
+          a.className = 'artiste';
+          a.textContent = ', ' + m.artiste;
+          li.appendChild(a);
+        }
+        liste.appendChild(li);
+      });
+    }
+    info.textContent = texte;
+    info.style.display = texte ? 'block' : 'none';
+  }
 
   /* ---------- Compteurs ---------- */
   function typeDeNom(nom) {
@@ -780,8 +872,10 @@
     }
 
     afficher();
+    afficherMusiques();
     if (!etat.config) { ouvrirReglages(); return; }
     chargerDrive();
+    chargerMusiques();
     pompe();
   })();
 </script>
