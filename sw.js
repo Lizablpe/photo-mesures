@@ -1,10 +1,14 @@
 /* Photo EINS : garde l'appli sur le téléphone pour qu'elle s'ouvre sans réseau.
    Pour forcer une mise à jour, change VERSION (ex. v2) en même temps que index.html. */
-const VERSION = 'photo-eins-v3';
+const VERSION = 'photo-eins-v4';
 const COQUILLE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(COQUILLE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(COQUILLE.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -30,7 +34,9 @@ self.addEventListener('fetch', (e) => {
   // Réponse immédiate depuis le téléphone, mise à jour en arrière-plan quand le réseau est là.
   e.respondWith(caches.open(VERSION).then(async (cache) => {
     const enCache = await cache.match(req, { ignoreSearch: memeOrigine });
-    const reseau = fetch(req)
+    // no-cache : on redemande toujours à GitHub si le fichier a changé (sinon le navigateur
+    // peut resservir une ancienne copie pendant 10 minutes).
+    const reseau = fetch(req, memeOrigine ? { cache: 'no-cache' } : undefined)
       .then((r) => {
         if (r && (r.ok || r.type === 'opaque')) cache.put(req, r.clone());
         return r;
