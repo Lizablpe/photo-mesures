@@ -185,6 +185,23 @@
   button:focus-visible, input:focus-visible { outline: 3px solid var(--tag); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .type:active { transform: none; } }
   .cache { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  /* ---------- Fiche terrain et contrôle ---------- */
+  .feuille.haute { max-height: 92vh; overflow-y: auto; }
+  .champFiche { margin: 14px 0 0; }
+  .champFiche label { display: block; font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+  .champFiche textarea { width: 100%; font: inherit; font-size: 17px; padding: 12px; min-height: 80px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--page); color: var(--text); }
+  .puces { display: flex; flex-wrap: wrap; gap: 8px; }
+  .puces button { font: inherit; font-size: 15px; padding: 8px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--page); color: var(--text); }
+  .puces button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  ul.controle { list-style: none; padding: 0; margin: 8px 0 0; }
+  ul.controle li { display: flex; gap: 10px; align-items: center; padding: 6px 0; font-size: 15px; border-bottom: 1px solid var(--line); }
+  ul.controle .pt { flex: none; width: 22px; height: 22px; border-radius: 50%; text-align: center; font-size: 13px; font-weight: 700; line-height: 22px; }
+  ul.controle .pt.ok { background: var(--ok); color: var(--on-ok); }
+  ul.controle .pt.ko { background: var(--err); color: #fff; }
+  ul.controle .pt.opt { border: 1px solid var(--line); color: var(--muted); }
 </style>
 </head>
 <body>
@@ -209,6 +226,12 @@
 <main>
   <div id="types"></div>
 
+  <h2>Fiche terrain</h2>
+  <button type="button" class="type shazam" id="ouvrirFiche">
+    <span class="code">✎</span><span class="libelle">Remplir la fiche du chantier</span><span class="badge" id="badgeFiche"></span>
+  </button>
+  <p class="vide" id="ficheInfo"></p>
+
   <h2>Musique</h2>
   <button type="button" class="type shazam" id="lancerShazam">
     <span class="code">♪</span><span class="libelle">Reconnaître la musique</span><span class="badge" id="badgeMusique"></span>
@@ -216,13 +239,16 @@
   <p class="vide" id="musiquesInfo"></p>
   <ul class="musiques" id="musiques"></ul>
 
+  <h2>Contrôle avant de partir</h2>
+  <ul class="controle" id="controle"></ul>
+
   <div class="attente" id="attente"></div>
   <button type="button" class="galerieBtn" id="versGalerie"></button>
   <p class="noteGalerie" id="noteGalerie">Dans la fenêtre qui s'ouvre, touche « Enregistrer les images ».</p>
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
-  <p class="version">Version 6 (dossiers au nom du projet)</p>
+  <p class="version">Version 7 (fiche terrain et contrôle)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -261,6 +287,20 @@
     <div class="actions">
       <button type="button" class="annuler" id="reglagesFermer">Fermer</button>
       <button type="button" class="valider" id="reglagesEnregistrer">Enregistrer et tester</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fiche terrain -->
+<div class="voile" id="voileFiche">
+  <div class="feuille haute" role="dialog" aria-modal="true" aria-labelledby="ficheTitre">
+    <h3 id="ficheTitre">Fiche terrain</h3>
+    <p id="ficheAide">Les réponses sont gardées sur le téléphone, puis envoyées dans le dossier du chantier sur le Drive.</p>
+    <div id="ficheChamps"></div>
+    <p class="message" id="ficheMessage"></p>
+    <div class="actions">
+      <button type="button" class="annuler" id="ficheFermer">Fermer</button>
+      <button type="button" class="valider" id="ficheEnregistrer">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -597,6 +637,7 @@
           break;                         // réseau en difficulté : on réessaiera plus tard
         }
       }
+      await envoyerFiches();
     } finally {
       etat.pompeActive = false;
     }
@@ -740,6 +781,7 @@
     }
     info.textContent = texte;
     info.style.display = texte ? 'block' : 'none';
+    if (typeof majCompteurs === 'function') majCompteurs();
   }
 
   /* ---------- Compteurs ---------- */
@@ -842,10 +884,162 @@
       }
     });
 
+    if (!$('voileFiche').classList.contains('ouvert')) chargerFiche();
+    majControle(compte);
+
     const depuis = $('depuis');
     depuis.textContent = projet ? 'Chantier : ' + projet.nom : 'Aucun chantier';
     depuis.className = projet ? 'projetActif' : '';
     $('reseau').textContent = navigator.onLine === false ? '(hors réseau)' : '';
+  }
+
+
+  /* ---------- Fiche terrain (envoyée dans le dossier du chantier : fiche_terrain.json) ---------- */
+  const CHAMPS_FICHE = [
+    { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'ex. 22h00-00h00', requis: true },
+    { id: 'lieu', libelle: 'Lieu', type: 'choix', options: ['clos', 'ouvert'], requis: true },
+    { id: 'portes', libelle: 'Portes pendant la diffusion', type: 'choix', options: ['fermées', 'ouvertes'], requis: true },
+    { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
+    { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
+    { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', requis: true },
+    { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
+    { id: 'type_fenetre', libelle: 'Type d’ouverture', type: 'choix', options: ['fenêtre', 'porte-fenêtre'] },
+    { id: 'audible', libelle: 'Musique audible chez le voisin ?', type: 'choix', options: ['oui', 'non'], requis: true },
+    { id: 'sono', libelle: 'Sonorisation', type: 'choix', options: ['fixe', 'matériel DJ / musiciens', 'les deux'], requis: true },
+    { id: 'zones', libelle: 'Nombre de zones sonorisées', type: 'nombre', requis: true },
+    { id: 'limiteur', libelle: 'Limiteur existant', type: 'texte', aide: '« non » ou marque + modèle', requis: true },
+    { id: 'capacite', libelle: 'Capacité > 300 personnes ?', type: 'choix', options: ['oui', 'non', 'inconnue'] },
+    { id: 'ouverture', libelle: 'Horaires d’ouverture et de diffusion', type: 'texte', aide: 'ce que dit le client' },
+    { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout ce qui peut servir au rapport (dictée possible)' }
+  ];
+  etat.fiche = {};
+
+  function cleFiche() { const p = projetActif(); return p ? p.dossier : jourChantierMaintenant(); }
+  function chargerFiche() { etat.fiche = lire('photoEins.fiche.' + cleFiche(), {}) || {}; }
+  function ficheRemplie() { return CHAMPS_FICHE.filter((c) => c.requis).every((c) => String(etat.fiche[c.id] || '').trim()); }
+
+  function construireFiche() {
+    const racine = $('ficheChamps');
+    racine.innerHTML = '';
+    CHAMPS_FICHE.forEach((c) => {
+      const bloc = document.createElement('div');
+      bloc.className = 'champFiche';
+      const lab = document.createElement('label');
+      lab.textContent = c.libelle + (c.requis ? ' *' : '');
+      bloc.appendChild(lab);
+      if (c.type === 'choix') {
+        const puces = document.createElement('div');
+        puces.className = 'puces';
+        c.options.forEach((o) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = o;
+          b.setAttribute('aria-pressed', etat.fiche[c.id] === o);
+          b.addEventListener('click', () => {
+            etat.fiche[c.id] = etat.fiche[c.id] === o ? '' : o;
+            [...puces.children].forEach((x) => x.setAttribute('aria-pressed', x.textContent === etat.fiche[c.id]));
+          });
+          puces.appendChild(b);
+        });
+        bloc.appendChild(puces);
+      } else {
+        const champ = document.createElement(c.type === 'zone' ? 'textarea' : 'input');
+        if (c.type !== 'zone') {
+          champ.type = 'text';
+          if (c.type === 'nombre') champ.inputMode = 'numeric';
+        }
+        champ.placeholder = c.aide || '';
+        champ.value = etat.fiche[c.id] || '';
+        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
+        bloc.appendChild(champ);
+      }
+      racine.appendChild(bloc);
+    });
+  }
+
+  $('ouvrirFiche').addEventListener('click', () => {
+    if (!etat.config) { ouvrirReglages(); return; }
+    chargerFiche();
+    const p = projetActif();
+    $('ficheTitre').textContent = 'Fiche terrain' + (p ? ' – ' + p.nom : '');
+    $('ficheMessage').textContent = '';
+    $('ficheMessage').className = 'message';
+    construireFiche();
+    $('voileFiche').classList.add('ouvert');
+  });
+  $('ficheFermer').addEventListener('click', () => $('voileFiche').classList.remove('ouvert'));
+  $('ficheEnregistrer').addEventListener('click', async () => {
+    const cle = cleFiche();
+    etat.fiche.maj = new Date().toISOString();
+    ecrire('photoEins.fiche.' + cle, etat.fiche);
+    ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
+    const msg = $('ficheMessage');
+    msg.className = 'message';
+    msg.textContent = 'Envoi…';
+    const ok = await envoyerFiches();
+    msg.className = 'message ' + (ok ? 'ok' : 'err');
+    msg.textContent = ok ? 'Fiche enregistrée dans le Drive ✓' : 'Gardée sur le téléphone, envoi dès que le réseau revient.';
+    afficher();
+  });
+
+  async function envoyerFiches() {
+    if (!etat.config || navigator.onLine === false) return false;
+    const aEnvoyer = lire('photoEins.ficheAEnvoyer', {}) || {};
+    let toutOk = true;
+    for (const cle of Object.keys(aEnvoyer)) {
+      const fiche = lire('photoEins.fiche.' + cle, null);
+      if (!fiche) { delete aEnvoyer[cle]; continue; }
+      const estJour = /^\d{4}-\d{2}-\d{2}$/.test(cle);
+      try {
+        const r = await fetch(etat.config.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ k: etat.config.cle, fiche: fiche, dossier: estJour ? '' : cle, jour: estJour ? cle : '' }),
+          redirect: 'follow'
+        });
+        const texte = (await r.text()).trim();
+        if (texte.indexOf('OK') === 0) delete aEnvoyer[cle]; else toutOk = false;
+      } catch (e) { toutOk = false; }
+    }
+    ecrire('photoEins.ficheAEnvoyer', aEnvoyer);
+    return toutOk;
+  }
+
+  /* ---------- Contrôle avant de partir ---------- */
+  function majControle(compte) {
+    const a = (id) => !!compte[id];
+    const items = [
+      ['Photo du point chez le voisin', a('voisin'), true],
+      ['Photo du point défavorable n°1', a('P1-defavorable'), true],
+      ['Photo d’au moins une enceinte ou un caisson', ['enceinte-1', 'enceinte-2', 'enceinte-3', 'enceinte-4', 'caisson-1', 'caisson-2'].some(a), true],
+      ['Photo de la table de mixage', a('table-mixage'), false],
+      ['Photo du point limiteur (si limiteur à prévoir)', a('P2-limiteur'), false],
+      ['Photo de la façade (page de garde)', a('facade'), false],
+      ['Musiques reconnues', !!(etat.musiques && etat.musiques.length), true],
+      ['Fiche terrain remplie', ficheRemplie(), true]
+    ];
+    const ul = $('controle');
+    ul.innerHTML = '';
+    items.forEach(([texte, ok, requis]) => {
+      const li = document.createElement('li');
+      const pt = document.createElement('span');
+      pt.className = 'pt ' + (ok ? 'ok' : requis ? 'ko' : 'opt');
+      pt.textContent = ok ? '✓' : requis ? '!' : '–';
+      const t = document.createElement('span');
+      t.textContent = texte;
+      li.append(pt, t);
+      ul.appendChild(li);
+    });
+    const b = $('badgeFiche');
+    b.className = 'badge';
+    b.textContent = '';
+    $('ouvrirFiche').classList.remove('fait');
+    const enAttente = (lire('photoEins.ficheAEnvoyer', {}) || {})[cleFiche()];
+    if (ficheRemplie()) {
+      b.classList.add(enAttente ? 'wait' : 'ok');
+      b.textContent = enAttente ? 'à envoyer' : '✓';
+      if (!enAttente) $('ouvrirFiche').classList.add('fait');
+    }
   }
 
   /* ---------- Affichage ---------- */
