@@ -138,6 +138,14 @@
     border: 1px solid var(--err); background: transparent; color: var(--err);
   }
   .vide { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+  .galerieBtn {
+    display: none; width: 100%; margin: 16px 0 0;
+    font: inherit; font-weight: 600; padding: 14px; border-radius: 12px;
+    border: 1px solid var(--primary); background: var(--surface); color: var(--text);
+  }
+  .galerieBtn.visible { display: block; }
+  .noteGalerie { margin: 6px 0 0; font-size: 13px; color: var(--muted); display: none; }
+  .noteGalerie.visible { display: block; }
 
   .voile {
     position: fixed; inset: 0; z-index: 10; background: rgba(10, 14, 24, 0.45);
@@ -192,6 +200,8 @@
   <div id="types"></div>
 
   <div class="attente" id="attente"></div>
+  <button type="button" class="galerieBtn" id="versGalerie"></button>
+  <p class="noteGalerie" id="noteGalerie">Dans la fenêtre qui s'ouvre, touche « Enregistrer les images ».</p>
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
@@ -268,7 +278,7 @@
     enCours: null,
     modeles: {},
     nomsUtilises: new Set(),
-    photos: [],        // {nom, jour, statut, b64, vignette, cree, erreur}
+    photos: [],        // {nom, jour, statut, b64, vignette, cree, erreur, galerie}
     drive: [],         // noms présents dans le Drive aujourd'hui
     debut: '',
     config: null,      // {url, cle}
@@ -313,7 +323,7 @@
     return {
       mettre: (p) => op('readwrite', (st) => st.put({
         nom: p.nom, jour: p.jour, statut: p.statut, b64: p.b64,
-        vignette: p.vignette, cree: p.cree, erreur: p.erreur
+        vignette: p.vignette, cree: p.cree, erreur: p.erreur, galerie: !!p.galerie
       })).catch(() => {}),
       retirer: (nom) => op('readwrite', (st) => st.delete(nom)).catch(() => {}),
       tout: () => op('readonly', (st) => st.getAll()).then((r) => r || []).catch(() => [])
@@ -461,7 +471,7 @@
 
     const photo = {
       nom: construireNom(choix, new Date()), jour: jour(), statut: 'prep',
-      b64: null, vignette: '', cree: Date.now(), erreur: ''
+      b64: null, vignette: '', cree: Date.now(), erreur: '', galerie: false
     };
     etat.photos.unshift(photo);
     afficher();
@@ -533,7 +543,7 @@
     etat.pompeActive = true;
     try {
       const file = etat.photos
-        .filter((p) => p.b64 && p.statut !== 'ok' && p.statut !== 'prep')
+        .filter((p) => p.b64 && p.statut !== 'ok' && p.statut !== 'prep')   // les photos déjà envoyées gardent leur b64 pour Photos
         .sort((a, b) => a.cree - b.cree);
       for (const p of file) {
         p.statut = 'envoi';
@@ -541,7 +551,7 @@
         afficher();
         if (await envoyerUne(p)) {
           p.statut = 'ok';
-          p.b64 = null;                  // la photo est dans le Drive : on libère le téléphone
+          if (p.galerie) p.b64 = null;   // dans le Drive et dans Photos : on libère le téléphone
           await Base.mettre(p);
           afficher();
         } else {
@@ -581,6 +591,41 @@
     if (document.visibilityState === 'visible') { pompe(); chargerDrive(); }
   });
   setInterval(pompe, 30000);
+
+  /* ---------- Copie dans la photothèque de l'iPhone ---------- */
+  const PAR_LOT = 15;   // iOS accepte mal un très grand nombre d'images d'un coup
+
+  function aCopier() {
+    return etat.photos.filter((p) => p.b64 && !p.galerie).sort((a, b) => a.cree - b.cree);
+  }
+
+  function enFichier(p) {
+    const bin = atob(p.b64);
+    const octets = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) octets[i] = bin.charCodeAt(i);
+    return new File([octets], p.nom, { type: 'image/jpeg' });
+  }
+
+  $('versGalerie').addEventListener('click', async () => {
+    const lot = aCopier().slice(0, PAR_LOT);
+    if (!lot.length) return;
+    const fichiers = lot.map(enFichier);
+    if (!navigator.canShare || !navigator.canShare({ files: fichiers })) {
+      alert('Ton iPhone ne permet pas l\'enregistrement depuis cette appli. Les photos restent dans le Drive.');
+      return;
+    }
+    try {
+      await navigator.share({ files: fichiers });
+      for (const p of lot) {
+        p.galerie = true;
+        if (p.statut === 'ok') p.b64 = null;
+        await Base.mettre(p);
+      }
+    } catch (err) {
+      // Fenêtre fermée sans enregistrer : on ne marque rien.
+    }
+    afficher();
+  });
 
   /* ---------- Compteurs ---------- */
   function typeDeNom(nom) {
@@ -645,7 +690,7 @@
     majCompteurs();
     const aujourdhui = jour();
     const visibles = etat.photos
-      .filter((p) => p.jour === aujourdhui || p.statut !== 'ok')
+      .filter((p) => p.jour === aujourdhui || p.statut !== 'ok' || (p.b64 && !p.galerie))
       .sort((a, b) => b.cree - a.cree);
 
     const liste = $('envois');
@@ -688,12 +733,25 @@
     const envoyees = etat.photos.filter((p) => p.jour === aujourdhui && p.statut === 'ok').length;
     $('compteur').textContent = envoyees + (envoyees > 1 ? ' photos envoyées' : ' photo envoyée');
 
+    const nbCopie = aCopier().length;
+    const btn = $('versGalerie');
+    if (nbCopie) {
+      btn.textContent = nbCopie > PAR_LOT
+        ? 'Enregistrer dans Photos (' + PAR_LOT + ' sur ' + nbCopie + ')'
+        : 'Enregistrer dans Photos (' + nbCopie + ')';
+      btn.classList.add('visible');
+      $('noteGalerie').classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+      $('noteGalerie').classList.remove('visible');
+    }
+
     const enAttente = etat.photos.filter((p) => p.statut !== 'ok').length;
     const bandeau = $('attente');
     if (enAttente) {
-      bandeau.textContent = enAttente + (enAttente > 1 ? ' photos pas encore dans le Drive. Elles sont gardées'
-        : ' photo pas encore dans le Drive. Elle est gardée') +
-        ' sur le téléphone et partira dès que le réseau revient, quand l\'appli est ouverte.';
+      bandeau.textContent = enAttente > 1
+        ? enAttente + ' photos pas encore dans le Drive. Elles sont gardées sur le téléphone et partiront dès que le réseau revient, quand l\'appli est ouverte.'
+        : '1 photo pas encore dans le Drive. Elle est gardée sur le téléphone et partira dès que le réseau revient, quand l\'appli est ouverte.';
       bandeau.classList.add('visible');
     } else {
       bandeau.classList.remove('visible');
@@ -712,7 +770,9 @@
     const aujourdhui = jour();
     const stock = await Base.tout();
     for (const p of stock) {
-      if (p.statut === 'ok' && p.jour !== aujourdhui) { Base.retirer(p.nom); continue; }   // ménage des jours passés
+      const vieille = Date.now() - (p.cree || 0) > 7 * 24 * 3600 * 1000;
+      // Ménage : photos envoyées d'un jour passé, déjà copiées dans Photos (ou de plus de 7 jours).
+      if (p.statut === 'ok' && p.jour !== aujourdhui && (p.galerie || !p.b64 || vieille)) { Base.retirer(p.nom); continue; }
       if (!p.b64 && p.statut !== 'ok') { Base.retirer(p.nom); continue; }
       if (p.statut === 'envoi' || p.statut === 'prep') p.statut = 'attente';
       etat.photos.push(p);
