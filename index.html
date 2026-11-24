@@ -139,6 +139,10 @@
   }
   .vide { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
   .shazam { width: 100%; }
+  ul.envois li.groupe {
+    border-bottom: 0; padding: 16px 0 2px; font-size: 14px; font-weight: 600; color: var(--muted);
+  }
+  .projetActif { color: var(--text); font-weight: 600; }
   ul.musiques { list-style: none; padding: 0; margin: 8px 0 0; }
   ul.musiques li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
   ul.musiques .heure { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
@@ -197,7 +201,7 @@
     <button type="button" id="srcGalerie" aria-pressed="false">Galerie</button>
   </div>
   <div class="chantier">
-    <span><span id="depuis">Photos du jour</span> <span id="reseau" class="horsReseau"></span></span>
+    <span><span id="depuis">Aucun chantier</span> <span id="reseau" class="horsReseau"></span></span>
     <button type="button" id="nouveauChantier">Nouveau chantier</button>
   </div>
 </header>
@@ -218,7 +222,7 @@
   <h2>Envois</h2>
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
-  <p class="version">Version 4 (musique Shazam)</p>
+  <p class="version">Version 6 (dossiers au nom du projet)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -230,6 +234,19 @@
     <div class="actions">
       <button type="button" class="annuler" id="feuilleAnnuler">Annuler</button>
       <button type="button" class="valider" id="feuilleValider">Prendre la photo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nouveau chantier : nom du projet -->
+<div class="voile" id="voileProjet">
+  <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="projetTitre">
+    <h3 id="projetTitre">Nouveau chantier</h3>
+    <p>Nom du projet (ex. Tetou Juan-les-Pins). Les photos seront rangées dans un dossier à ce nom.</p>
+    <input id="champProjet" type="text" autocomplete="off" autocapitalize="words" enterkeyhint="done">
+    <div class="actions">
+      <button type="button" class="annuler" id="projetPasser">Sans projet</button>
+      <button type="button" class="valider" id="projetValider">Commencer</button>
     </div>
   </div>
 </div>
@@ -257,7 +274,8 @@
   const TYPES = [
     { section: 'Points de mesure', items: [
       { id: 'voisin', code: 'V', libelle: 'Voisin' },
-      { id: 'P2-limiteur', code: 'P2', libelle: 'Limiteur' },
+      { id: 'P2-limiteur', code: 'P2', libelle: 'Limiteur 1' },
+      { id: 'P2-limiteur-2', code: 'P2', libelle: 'Limiteur 2' },
       { id: 'P1-defavorable', code: 'P1', libelle: 'Défavorable 1' },
       { id: 'P1-defavorable-2', code: 'P1', libelle: 'Défavorable 2' },
       { id: 'P1-defavorable-3', code: 'P1', libelle: 'Défavorable 3' },
@@ -337,7 +355,8 @@
     return {
       mettre: (p) => op('readwrite', (st) => st.put({
         nom: p.nom, jour: p.jour, statut: p.statut, b64: p.b64,
-        vignette: p.vignette, cree: p.cree, erreur: p.erreur, galerie: !!p.galerie
+        vignette: p.vignette, cree: p.cree, erreur: p.erreur, galerie: !!p.galerie,
+        dossier: p.dossier || '', projet: p.projet || ''
       })).catch(() => {}),
       retirer: (nom) => op('readwrite', (st) => st.delete(nom)).catch(() => {}),
       tout: () => op('readonly', (st) => st.getAll()).then((r) => r || []).catch(() => [])
@@ -421,6 +440,7 @@
 
   function choisir(t) {
     if (!etat.config) { ouvrirReglages(); return; }
+    if (!projetActif() && etat.sansProjet !== jourChantierMaintenant()) { ouvrirProjet(t); return; }
     if (!t.demande) {
       etat.enCours = { type: t, texte: '' };
       ouvrirAppareil();
@@ -485,7 +505,9 @@
 
     const photo = {
       nom: construireNom(choix, new Date()), jour: jour(), statut: 'prep',
-      b64: null, vignette: '', cree: Date.now(), erreur: '', galerie: false
+      b64: null, vignette: '', cree: Date.now(), erreur: '', galerie: false,
+      dossier: projetActif() ? projetActif().dossier : '',
+      projet: projetActif() ? projetActif().nom : ''
     };
     etat.photos.unshift(photo);
     afficher();
@@ -535,7 +557,7 @@
       const r = await fetch(etat.config.url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ k: etat.config.cle, name: photo.nom, data: photo.b64 }),
+        body: JSON.stringify({ k: etat.config.cle, name: photo.nom, data: photo.b64, dossier: photo.dossier || '' }),
         signal: ctrl.signal,
         redirect: 'follow'
       });
@@ -583,8 +605,9 @@
   async function chargerDrive() {
     if (!etat.config) return false;
     try {
+      const projet = projetActif();
       const u = etat.config.url + '?action=lister&k=' + encodeURIComponent(etat.config.cle) +
-        '&prefixe=' + encodeURIComponent(jour());
+        (projet ? '&dossier=' + encodeURIComponent(projet.dossier) : '&prefixe=' + encodeURIComponent(jour()));
       const r = await fetch(u, { redirect: 'follow' });
       const j = await r.json();
       if (Array.isArray(j)) {
@@ -731,23 +754,70 @@
     return null;
   }
 
-  $('nouveauChantier').addEventListener('click', () => {
-    etat.debut = horodater(new Date());
-    ecrire('photoEins.debut', etat.debut);
+  /* ---------- Projet (un dossier Drive par chantier) ---------- */
+  etat.projet = null;        // {nom, jour, dossier}
+  etat.sansProjet = '';      // journée pour laquelle Liza a choisi « Sans projet »
+  etat.apresProjet = null;   // type à photographier une fois le projet choisi
+
+  function projetActif() {
+    // Un projet vaut pour une journée de chantier (6 h → 6 h) : le lendemain, on redemande.
+    return etat.projet && etat.projet.jour === jourChantierMaintenant() ? etat.projet : null;
+  }
+
+  function ouvrirProjet(apres) {
+    etat.apresProjet = apres || null;
+    $('champProjet').value = '';
+    $('voileProjet').classList.add('ouvert');
+    setTimeout(() => $('champProjet').focus(), 50);
+  }
+
+  function fermerProjet() {
+    $('voileProjet').classList.remove('ouvert');
+    etat.drive = [];
+    chargerDrive();
     afficher();
+    const apres = etat.apresProjet;
+    etat.apresProjet = null;
+    if (apres) choisir(apres);   // même geste : l'appareil photo peut s'ouvrir
+  }
+
+  function validerProjet() {
+    const nom = $('champProjet').value.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!nom) { $('champProjet').focus(); return; }
+    const j = jourChantierMaintenant();
+    const maintenant = new Date();
+    const hhmm = deux(maintenant.getHours()) + deux(maintenant.getMinutes());
+    // Dossier Drive : « Nom du projet_AAAA-MM-JJ_HHmm » (journée de chantier + heure de début)
+    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm };
+    ecrire('photoEins.projet', etat.projet);
+    fermerProjet();
+  }
+
+  $('nouveauChantier').addEventListener('click', () => ouvrirProjet(null));
+  $('projetValider').addEventListener('click', validerProjet);
+  $('champProjet').addEventListener('keydown', (e) => { if (e.key === 'Enter') validerProjet(); });
+  $('projetPasser').addEventListener('click', () => {
+    etat.projet = null;
+    etat.sansProjet = jourChantierMaintenant();
+    ecrire('photoEins.projet', null);
+    ecrire('photoEins.sansProjet', etat.sansProjet);
+    fermerProjet();
   });
 
   function majCompteurs() {
     const aujourdhui = jour();
-    if (!etat.debut || etat.debut < aujourdhui + '_0000') etat.debut = aujourdhui + '_0000';
+    const projet = projetActif();
 
+    // Compteurs du projet en cours (toutes ses photos), sinon des photos du jour hors projet.
     const statuts = new Map();
     etat.drive.forEach((n) => statuts.set(n, 'ok'));
-    etat.photos.forEach((p) => statuts.set(p.nom, p.statut));
+    etat.photos
+      .filter((p) => (projet ? p.dossier === projet.dossier : !p.dossier))
+      .forEach((p) => statuts.set(p.nom, p.statut));
 
     const compte = {};
     statuts.forEach((st, nom) => {
-      if (nom.indexOf(aujourdhui) !== 0 || nom < etat.debut) return;
+      if (!projet && nom.indexOf(aujourdhui) !== 0) return;
       const id = typeDeNom(nom);
       if (!id) return;
       const c = compte[id] || (compte[id] = { total: 0, attente: 0 });
@@ -772,8 +842,9 @@
       }
     });
 
-    const hhmm = etat.debut.slice(11);
-    $('depuis').textContent = hhmm === '0000' ? 'Photos du jour' : 'Photos depuis ' + hhmm.slice(0, 2) + 'h' + hhmm.slice(2);
+    const depuis = $('depuis');
+    depuis.textContent = projet ? 'Chantier : ' + projet.nom : 'Aucun chantier';
+    depuis.className = projet ? 'projetActif' : '';
     $('reseau').textContent = navigator.onLine === false ? '(hors réseau)' : '';
   }
 
@@ -787,7 +858,33 @@
 
     const liste = $('envois');
     liste.innerHTML = '';
+
+    // Regroupement par projet : le projet en cours d'abord, puis les autres du plus récent au plus ancien.
+    const projet = projetActif();
+    const groupes = [];
     visibles.forEach((p) => {
+      const cle = p.dossier || '';
+      let g = groupes.find((x) => x.cle === cle);
+      if (!g) { g = { cle: cle, p: p, photos: [] }; groupes.push(g); }
+      g.photos.push(p);
+    });
+    groupes.sort((a, b) => (projet && a.cle === projet.dossier ? -1 : projet && b.cle === projet.dossier ? 1 : 0));
+    const ordonnees = [];
+    groupes.forEach((g) => {
+      const m = g.cle.match(/(\d{4})-(\d{2})-(\d{2})/);
+      const date = m ? ' (' + m[3] + '/' + m[2] + ')' : '';
+      ordonnees.push({ titre: g.cle ? (g.p.projet || g.cle) + date : 'Sans projet' });
+      g.photos.forEach((p) => ordonnees.push(p));
+    });
+
+    ordonnees.forEach((p) => {
+      if (p.titre) {
+        const t = document.createElement('li');
+        t.className = 'groupe';
+        t.textContent = p.titre;
+        liste.appendChild(t);
+        return;
+      }
       const li = document.createElement('li');
       const img = document.createElement('img');
       img.alt = '';
@@ -857,7 +954,8 @@
 
     etat.config = lire('photoEins.config', null);
     etat.modeles = lire('photoEins.modeles', {});
-    etat.debut = lire('photoEins.debut', '');
+    etat.projet = lire('photoEins.projet', null);
+    etat.sansProjet = lire('photoEins.sansProjet', '');
 
     const aujourdhui = jour();
     const stock = await Base.tout();
