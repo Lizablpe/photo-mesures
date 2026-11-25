@@ -296,7 +296,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 12 – Terrain EINS (contrôle cliquable, Voisin 2, fiche allégée)</p>
+  <p class="version">Version 12.1 – Terrain EINS (2e voisin dans la fiche)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -620,7 +620,18 @@
       await Base.mettre(photo);          // gardée sur le téléphone avant tout envoi
       const cleF = photo.dossier || jourChantierMaintenant();
       if (choix.type.id === 'voisin') enregistrerPosition('gps_voisin', cleF, true);
-      else if (choix.type.id === 'voisin-2') enregistrerPosition('gps_voisin_2', cleF, true);
+      else if (choix.type.id === 'voisin-2') {
+        // Photo Voisin 2 : on coche « 2e voisin : oui » dans la fiche s'il n'est pas déjà répondu.
+        const f = lire('photoEins.fiche.' + cleF, {}) || {};
+        if (!f.deux_voisins) {
+          f.deux_voisins = 'oui';
+          f.maj = new Date().toISOString();
+          ecrire('photoEins.fiche.' + cleF, f);
+          ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cleF]: true }));
+          if (cleF === cleFiche() && !$('voileFiche').classList.contains('ouvert')) chargerFiche();
+        }
+        enregistrerPosition('gps_voisin_2', cleF, true);
+      }
       else if (/^(P1-defavorable|P2-limiteur)/.test(choix.type.id)) enregistrerPosition('gps_etablissement', cleF, true);
     } catch (err) {
       photo.statut = 'echec';
@@ -1071,7 +1082,8 @@
     { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
     { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
     { id: 'gps_voisin', libelle: 'Position GPS du voisin', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin, ou touche « Ici » sur place' },
-    { id: 'gps_voisin_2', libelle: 'Position GPS du voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2, ou touche « Ici » sur place', si: (f) => !!f.gps_voisin_2 || voisin2Pris() },
+    { id: 'deux_voisins', libelle: 'Un 2e voisin chez qui mesurer ?', type: 'choix', options: ['oui', 'non'] },
+    { id: 'gps_voisin_2', libelle: 'Position GPS du voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2, ou touche « Ici » sur place', si: (f) => f.deux_voisins === 'oui' || (f.deux_voisins !== 'non' && (!!f.gps_voisin_2 || voisin2Pris())) },
     { id: 'gps_etablissement', libelle: 'Position GPS de l’établissement', type: 'gps', aide: 'Enregistrée seule avec la 1re photo Défavorable ou Limiteur, ou touche « Ici »' },
     { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', requis: true },
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
@@ -1177,6 +1189,11 @@
           b.addEventListener('click', () => {
             etat.fiche[c.id] = etat.fiche[c.id] === o ? '' : o;
             [...puces.children].forEach((x) => x.setAttribute('aria-pressed', x.textContent === etat.fiche[c.id]));
+            if (CHAMPS_FICHE.some((x) => x.si)) {   // affiche ou masque les champs qui dépendent de ce choix
+              const haut = $('ficheChamps').closest('.feuille').scrollTop;
+              construireFiche();
+              $('ficheChamps').closest('.feuille').scrollTop = haut;
+            }
           });
           puces.appendChild(b);
         });

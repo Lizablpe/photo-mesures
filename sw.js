@@ -1,6 +1,6 @@
 /* Photo EINS : garde l'appli sur le téléphone pour qu'elle s'ouvre sans réseau.
    Pour forcer une mise à jour, change VERSION (ex. v2) en même temps que index.html. */
-const VERSION = 'photo-eins-v16';
+const VERSION = 'photo-eins-v17';
 const COQUILLE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {

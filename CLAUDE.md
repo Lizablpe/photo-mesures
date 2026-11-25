@@ -39,7 +39,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   `micro-limiteur`, `calibration-avant`, `calibration-apres`, `enceinte-1..4`, `caisson-1..2`, `table-mixage`, `ampli-1..2`,
   `plan`, `autre-<description>`. (`facade` a été retiré en v10, mais il existe dans d'anciens dossiers.)
 - Fiche (`CHAMPS_FICHE`) : horaires, lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
-  sont cochés), portes, voisin, distance, gps_voisin, gps_voisin_2 (si photo Voisin 2), gps_etablissement, piece, fenetre, audible,
+  sont cochés), portes, voisin, distance, gps_voisin, deux_voisins (« oui » / « non », mis à « oui » par la photo Voisin 2),
+  gps_voisin_2 (visible si deux_voisins = « oui »), gps_etablissement, piece, fenetre, audible,
   sono, zones, limiteur (« non », « oui » ou marque + modèle), capacite, ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
 - GPS : format `"lat, lon (±précision m)"`. Il s'enregistre seul à la photo Voisin, et à la 1re photo P1 / P2 pour l'établissement.
 - Stockage local : IndexedDB `photo-eins` (store `photos`) et localStorage `photoEins.*`
@@ -63,6 +64,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - v11 : GPS voisin / établissement, zones close et ouverte, affaires du CRM. v11.1 : la liste CRM est ignorée si le script ne la gère pas.
 - v12 : boutons dans l'ordre d'intervention (calibration en tête), photo `voisin-2` + `gps_voisin_2`, contrôle avant de partir
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
+  v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
 
 ## En attente
 - **Connexion Notion** : Liza n'a pas le droit de créer une connexion interne dans l'espace « Super Corps ». Il faut que le
