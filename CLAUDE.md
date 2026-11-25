@@ -35,12 +35,12 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   Un sous-dossier par chantier `Nom_AAAA-MM-JJ_HHmm`, sinon un par journée `AAAA-MM-JJ` (la journée bascule à 6 h).
 
 ## Conventions à respecter
-- Photos : `AAAA-MM-JJ_HHmm_<type>[_Marque Modèle][_n].jpg`. Types : `voisin`, `P1-defavorable(-2..4)`, `P2-limiteur(-2)`,
+- Photos : `AAAA-MM-JJ_HHmm_<type>[_Marque Modèle][_n].jpg`. Types : `voisin`, `voisin-2`, `P1-defavorable(-2..4)`, `P2-limiteur(-2)`,
   `micro-limiteur`, `calibration-avant`, `calibration-apres`, `enceinte-1..4`, `caisson-1..2`, `table-mixage`, `ampli-1..2`,
   `plan`, `autre-<description>`. (`facade` a été retiré en v10, mais il existe dans d'anciens dossiers.)
 - Fiche (`CHAMPS_FICHE`) : horaires, lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
-  sont cochés), portes, voisin, distance, gps_voisin, gps_etablissement, piece, fenetre, audible, sono, zones, limiteur, capacite,
-  ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
+  sont cochés), portes, voisin, distance, gps_voisin, gps_voisin_2 (si photo Voisin 2), gps_etablissement, piece, fenetre, audible,
+  sono, zones, limiteur (« non », « oui » ou marque + modèle), capacite, ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
 - GPS : format `"lat, lon (±précision m)"`. Il s'enregistre seul à la photo Voisin, et à la 1re photo P1 / P2 pour l'établissement.
 - Stockage local : IndexedDB `photo-eins` (store `photos`) et localStorage `photoEins.*`
   (config, projet, projets, fiche.<dossier>, ficheAEnvoyer, modeles, affaires, sansProjet).
@@ -61,6 +61,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - v9 : lieu à choix multiple, `type_fenetre` retiré, croix de fermeture, reprise d'un chantier, visionneuse photo, masquage des photos.
 - v10 : calibration avant / après, `facade` retiré, effacement des photos envoyées (Réglages). v10.1 : liste des chantiers mémorisée.
 - v11 : GPS voisin / établissement, zones close et ouverte, affaires du CRM. v11.1 : la liste CRM est ignorée si le script ne la gère pas.
+- v12 : boutons dans l'ordre d'intervention (calibration en tête), photo `voisin-2` + `gps_voisin_2`, contrôle avant de partir
+  cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
 
 ## En attente
 - **Connexion Notion** : Liza n'a pas le droit de créer une connexion interne dans l'espace « Super Corps ». Il faut que le

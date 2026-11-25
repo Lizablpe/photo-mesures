@@ -9,7 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Terrain EINS">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f5f3ef">
+<meta name="theme-color" content="#f5f3ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121826" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -243,6 +244,11 @@
   ul.controle .pt.ok { background: var(--ok); color: var(--on-ok); }
   ul.controle .pt.ko { background: var(--err); color: #fff; }
   ul.controle .pt.opt { border: 1px solid var(--line); color: var(--muted); }
+  ul.controle li.aFaire { padding: 0; }
+  ul.controle li.aFaire button { display: flex; gap: 10px; align-items: center; width: 100%; min-height: 44px;
+    font: inherit; font-size: 15px; text-align: left; padding: 6px 0; border: 0; background: transparent; color: var(--text); }
+  ul.controle .fleche { margin-left: auto; padding-left: 8px; font-size: 22px; line-height: 1; color: var(--muted); }
+  .aideControle { margin: 0; font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -263,7 +269,7 @@
   </div>
   <div class="chantier">
     <span><span id="depuis">Aucun chantier</span> <span id="reseau" class="horsReseau"></span></span>
-    <button type="button" id="nouveauChantier">Changer de chantier</button>
+    <button type="button" id="nouveauChantier">Choisir un chantier</button>
   </div>
 </header>
 
@@ -280,6 +286,7 @@
   <ul class="musiques" id="musiques"></ul>
 
   <h2>Contrôle avant de partir</h2>
+  <p class="aideControle">Touche une ligne à compléter pour prendre la photo ou ouvrir la fiche.</p>
   <ul class="controle" id="controle"></ul>
 
   <div class="attente" id="attente"></div>
@@ -289,7 +296,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 11.1 – Terrain EINS (GPS, zones close / ouverte, affaires du CRM)</p>
+  <p class="version">Version 12 – Terrain EINS (contrôle cliquable, Voisin 2, fiche allégée)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -342,9 +349,8 @@
     <p id="ficheAide">Les réponses sont gardées sur le téléphone, puis envoyées dans le dossier du chantier sur le Drive.</p>
     <div id="ficheChamps"></div>
     <p class="message" id="ficheMessage"></p>
-    <div class="actions">
-      <button type="button" class="annuler" id="ficheFermer">Fermer</button>
-      <button type="button" class="valider" id="ficheEnregistrer">Enregistrer</button>
+    <div class="actions" style="grid-template-columns: 1fr;">
+      <button type="button" class="valider" id="ficheEnregistrer">Enregistrer et fermer</button>
     </div>
   </div>
 </div>
@@ -357,17 +363,8 @@
 <script>
   /* ---------- Types de photos (mêmes noms que la skill EINS) ---------- */
   // demande : 'modele' (marque et modèle, facultatif) ou 'desc' (description obligatoire)
+  // Ordre d'une intervention : calibration, sono, points de mesure, plan.
   const TYPES = [
-    { section: 'Points de mesure', items: [
-      { id: 'voisin', code: 'V', libelle: 'Voisin' },
-      { id: 'P2-limiteur', code: 'P2', libelle: 'Limiteur 1' },
-      { id: 'P2-limiteur-2', code: 'P2', libelle: 'Limiteur 2' },
-      { id: 'P1-defavorable', code: 'P1', libelle: 'Défavorable 1' },
-      { id: 'P1-defavorable-2', code: 'P1', libelle: 'Défavorable 2' },
-      { id: 'P1-defavorable-3', code: 'P1', libelle: 'Défavorable 3' },
-      { id: 'P1-defavorable-4', code: 'P1', libelle: 'Défavorable 4' },
-      { id: 'micro-limiteur', code: 'M', libelle: 'Micro du limiteur' }
-    ]},
     { section: 'Calibration', items: [
       { id: 'calibration-avant', code: 'CA', libelle: 'Calibration avant' },
       { id: 'calibration-apres', code: 'CP', libelle: 'Calibration après' }
@@ -385,6 +382,17 @@
       { id: 'ampli-1', code: 'A1', libelle: 'Ampli 1', demande: 'modele' },
       { id: 'ampli-2', code: 'A2', libelle: 'Ampli 2', demande: 'modele' }
     ]},
+    { section: 'Points de mesure', items: [
+      { id: 'voisin', code: 'V', libelle: 'Voisin' },
+      { id: 'voisin-2', code: 'V2', libelle: 'Voisin 2' },
+      { id: 'P2-limiteur', code: 'P2', libelle: 'Limiteur 1' },
+      { id: 'P2-limiteur-2', code: 'P2', libelle: 'Limiteur 2' },
+      { id: 'P1-defavorable', code: 'P1', libelle: 'Défavorable 1' },
+      { id: 'P1-defavorable-2', code: 'P1', libelle: 'Défavorable 2' },
+      { id: 'P1-defavorable-3', code: 'P1', libelle: 'Défavorable 3' },
+      { id: 'P1-defavorable-4', code: 'P1', libelle: 'Défavorable 4' },
+      { id: 'micro-limiteur', code: 'M', libelle: 'Micro du limiteur' }
+    ]},
     { section: 'Divers', items: [
       { id: 'plan', code: 'PL', libelle: 'Plan (avec les points)' },
       { id: 'autre', code: '…', libelle: 'Autre', demande: 'desc' }
@@ -393,6 +401,7 @@
 
   const $ = (id) => document.getElementById(id);
   const IDS = TYPES.flatMap((g) => g.items.map((t) => t.id)).sort((a, b) => b.length - a.length);
+  const TYPE_PAR_ID = Object.fromEntries(TYPES.flatMap((g) => g.items.map((t) => [t.id, t])));
   const BADGES = {};
 
   const etat = {
@@ -611,6 +620,7 @@
       await Base.mettre(photo);          // gardée sur le téléphone avant tout envoi
       const cleF = photo.dossier || jourChantierMaintenant();
       if (choix.type.id === 'voisin') enregistrerPosition('gps_voisin', cleF, true);
+      else if (choix.type.id === 'voisin-2') enregistrerPosition('gps_voisin_2', cleF, true);
       else if (/^(P1-defavorable|P2-limiteur)/.test(choix.type.id)) enregistrerPosition('gps_etablissement', cleF, true);
     } catch (err) {
       photo.statut = 'echec';
@@ -1046,6 +1056,7 @@
     const depuis = $('depuis');
     depuis.textContent = projet ? 'Chantier : ' + projet.nom : 'Aucun chantier';
     depuis.className = projet ? 'projetActif' : '';
+    $('nouveauChantier').textContent = projet ? 'Changer de chantier' : 'Choisir un chantier';
     $('reseau').textContent = navigator.onLine === false ? '(hors réseau)' : '';
   }
 
@@ -1060,13 +1071,15 @@
     { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
     { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
     { id: 'gps_voisin', libelle: 'Position GPS du voisin', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin, ou touche « Ici » sur place' },
+    { id: 'gps_voisin_2', libelle: 'Position GPS du voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2, ou touche « Ici » sur place', si: (f) => !!f.gps_voisin_2 || voisin2Pris() },
     { id: 'gps_etablissement', libelle: 'Position GPS de l’établissement', type: 'gps', aide: 'Enregistrée seule avec la 1re photo Défavorable ou Limiteur, ou touche « Ici »' },
     { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', requis: true },
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
     { id: 'audible', libelle: 'Musique audible chez le voisin ?', type: 'choix', options: ['oui', 'non'], requis: true },
     { id: 'sono', libelle: 'Sonorisation', type: 'choix', options: ['fixe', 'matériel DJ / musiciens', 'les deux'], requis: true },
     { id: 'zones', libelle: 'Nombre de zones sonorisées', type: 'nombre', requis: true },
-    { id: 'limiteur', libelle: 'Limiteur existant', type: 'texte', aide: '« non » ou marque + modèle', requis: true },
+    // Valeur enregistrée : « non », « oui » ou la marque + modèle (comme avant)
+    { id: 'limiteur', libelle: 'Limiteur existant', type: 'ouiMarque', aide: 'marque et modèle, si tu les connais', requis: true },
     { id: 'capacite', libelle: 'Capacité > 300 personnes ?', type: 'choix', options: ['oui', 'non', 'inconnue'] },
     { id: 'ouverture', libelle: 'Horaires d’ouverture et de diffusion', type: 'texte', aide: 'ce que dit le client' },
     { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout ce qui peut servir au rapport (dictée possible)' }
@@ -1076,6 +1089,11 @@
   function cleFiche() { const p = projetActif(); return p ? p.dossier : jourChantierMaintenant(); }
   function chargerFiche() { etat.fiche = lire('photoEins.fiche.' + cleFiche(), {}) || {}; }
   function lieuMixte(f) { const l = String((f || {}).lieu || ''); return l.includes('clos') && l.includes('ouvert'); }
+  function voisin2Pris() {
+    const p = projetActif();
+    const noms = etat.drive.concat(etat.photos.filter((x) => (p ? x.dossier === p.dossier : !x.dossier)).map((x) => x.nom));
+    return noms.some((n) => typeDeNom(n) === 'voisin-2');
+  }
   function champVisible(c) { return !c.si || c.si(etat.fiche); }
   function ficheRemplie() { return CHAMPS_FICHE.filter((c) => c.requis && champVisible(c)).every((c) => String(etat.fiche[c.id] || '').trim()); }
 
@@ -1163,6 +1181,40 @@
           puces.appendChild(b);
         });
         bloc.appendChild(puces);
+      } else if (c.type === 'ouiMarque') {
+        const puces = document.createElement('div');
+        puces.className = 'puces';
+        const champ = document.createElement('input');
+        champ.type = 'text';
+        champ.placeholder = c.aide || '';
+        champ.style.marginTop = '8px';
+        const choix = () => {
+          const v = String(etat.fiche[c.id] || '').trim();
+          return !v ? '' : v.toLowerCase() === 'non' ? 'non' : 'oui';
+        };
+        const maj = () => {
+          const s = choix();
+          [...puces.children].forEach((x) => x.setAttribute('aria-pressed', x.textContent === s));
+          champ.style.display = s === 'oui' ? '' : 'none';
+        };
+        ['non', 'oui'].forEach((o) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = o;
+          b.addEventListener('click', () => {
+            if (choix() === o) { etat.fiche[c.id] = ''; champ.value = ''; }
+            else if (o === 'non') { etat.fiche[c.id] = 'non'; champ.value = ''; }
+            else { etat.fiche[c.id] = champ.value.trim() || 'oui'; }
+            maj();
+            if (choix() === 'oui') champ.focus();
+          });
+          puces.appendChild(b);
+        });
+        const v = String(etat.fiche[c.id] || '').trim();
+        champ.value = choix() === 'oui' && v.toLowerCase() !== 'oui' ? v : '';
+        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value.trim() || 'oui'; });
+        bloc.append(puces, champ);
+        maj();
       } else if (c.type === 'gps') {
         const ligne = document.createElement('div');
         ligne.className = 'gpsLigne';
@@ -1231,20 +1283,16 @@
     envoyerFiches().then(afficher);
     afficher();
   }
-  $('ficheFermer').addEventListener('click', fermerFiche);
   $('ficheCroix').addEventListener('click', fermerFiche);
-  $('ficheEnregistrer').addEventListener('click', async () => {
+  $('ficheEnregistrer').addEventListener('click', () => {
+    // Enregistre sur le téléphone, ferme, puis envoie. Le badge du bouton Fiche montre « à envoyer » ou ✓.
     const cle = cleFiche();
     etat.fiche.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, etat.fiche);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
-    const msg = $('ficheMessage');
-    msg.className = 'message';
-    msg.textContent = 'Envoi…';
-    const ok = await envoyerFiches();
-    msg.className = 'message ' + (ok ? 'ok' : 'err');
-    msg.textContent = ok ? 'Fiche enregistrée dans le Drive ✓' : 'Gardée sur le téléphone, envoi dès que le réseau revient.';
+    $('voileFiche').classList.remove('ouvert');
     afficher();
+    envoyerFiches().then(afficher);
   });
 
   async function envoyerFiches() {
@@ -1255,16 +1303,21 @@
       const fiche = lire('photoEins.fiche.' + cle, null);
       if (!fiche) { delete aEnvoyer[cle]; continue; }
       const estJour = /^\d{4}-\d{2}-\d{2}$/.test(cle);
+      // Délai maximum : sans lui, un réseau bloqué figeait aussi l'envoi des photos.
+      const ctrl = new AbortController();
+      const minuterie = setTimeout(() => ctrl.abort(), 30000);
       try {
         const r = await fetch(etat.config.url, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ k: etat.config.cle, fiche: fiche, dossier: estJour ? '' : cle, jour: estJour ? cle : '' }),
+          signal: ctrl.signal,
           redirect: 'follow'
         });
         const texte = (await r.text()).trim();
         if (texte.indexOf('OK') === 0) delete aEnvoyer[cle]; else toutOk = false;
       } catch (e) { toutOk = false; }
+      finally { clearTimeout(minuterie); }
     }
     ecrire('photoEins.ficheAEnvoyer', aEnvoyer);
     return toutOk;
@@ -1273,28 +1326,46 @@
   /* ---------- Contrôle avant de partir ---------- */
   function majControle(compte) {
     const a = (id) => !!compte[id];
+    // [texte, fait, obligatoire, action quand on touche la ligne : type de photo, 'musique' ou 'fiche']
     const items = [
-      ['Photo du point chez le voisin', a('voisin'), true],
-      ['Photo du point défavorable n°1', a('P1-defavorable'), true],
-      ['Photo d’au moins une enceinte ou un caisson', ['enceinte-1', 'enceinte-2', 'enceinte-3', 'enceinte-4', 'caisson-1', 'caisson-2'].some(a), true],
-      ['Photo de la table de mixage', a('table-mixage'), false],
-      ['Plan avec les enceintes et les points', a('plan'), true],
-      ['Photo du point limiteur (si limiteur à prévoir)', a('P2-limiteur'), false],
-      ['Photo de la calibration avant mesures', a('calibration-avant'), true],
-      ['Photo de la calibration après mesures', a('calibration-apres'), true],
-      ['Musiques reconnues', !!(etat.musiques && etat.musiques.length), true],
-      ['Fiche terrain remplie', ficheRemplie(), true]
+      ['Photo de la calibration avant mesures', a('calibration-avant'), true, 'calibration-avant'],
+      ['Photo d’au moins une enceinte ou un caisson', ['enceinte-1', 'enceinte-2', 'enceinte-3', 'enceinte-4', 'caisson-1', 'caisson-2'].some(a), true, 'enceinte-1'],
+      ['Photo de la table de mixage', a('table-mixage'), false, 'table-mixage'],
+      ['Photo du point chez le voisin', a('voisin'), true, 'voisin'],
+      ['Photo du point défavorable n°1', a('P1-defavorable'), true, 'P1-defavorable'],
+      ['Photo du point limiteur (si limiteur à prévoir)', a('P2-limiteur'), false, 'P2-limiteur'],
+      ['Plan avec les enceintes et les points', a('plan'), true, 'plan'],
+      ['Musiques reconnues', !!(etat.musiques && etat.musiques.length), true, 'musique'],
+      ['Fiche terrain remplie', ficheRemplie(), true, 'fiche'],
+      ['Photo de la calibration après mesures', a('calibration-apres'), true, 'calibration-apres']
     ];
     const ul = $('controle');
     ul.innerHTML = '';
-    items.forEach(([texte, ok, requis]) => {
+    items.forEach(([texte, ok, requis, action]) => {
       const li = document.createElement('li');
       const pt = document.createElement('span');
       pt.className = 'pt ' + (ok ? 'ok' : requis ? 'ko' : 'opt');
       pt.textContent = ok ? '✓' : requis ? '!' : '–';
       const t = document.createElement('span');
       t.textContent = texte;
-      li.append(pt, t);
+      if (ok) {
+        li.append(pt, t);
+      } else {
+        // Ligne à compléter : on la touche pour prendre la photo, lancer Shazam ou ouvrir la fiche.
+        li.className = 'aFaire';
+        const b = document.createElement('button');
+        b.type = 'button';
+        const fl = document.createElement('span');
+        fl.className = 'fleche';
+        fl.textContent = '›';
+        b.append(pt, t, fl);
+        b.addEventListener('click', () => {
+          if (action === 'fiche') $('ouvrirFiche').click();
+          else if (action === 'musique') $('lancerShazam').click();
+          else choisir(TYPE_PAR_ID[action]);
+        });
+        li.appendChild(b);
+      }
       ul.appendChild(li);
     });
     const b = $('badgeFiche');
