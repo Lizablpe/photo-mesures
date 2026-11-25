@@ -65,6 +65,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - v12 : boutons dans l'ordre d'intervention (calibration en tête), photo `voisin-2` + `gps_voisin_2`, contrôle avant de partir
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
   v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
+  v12.2 : bouton « Micro du limiteur » déplacé dans Régie (nom de fichier inchangé : `micro-limiteur`).
 
 ## En attente
 - **Connexion Notion** : Liza n'a pas le droit de créer une connexion interne dans l'espace « Super Corps ». Il faut que le
