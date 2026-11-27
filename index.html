@@ -212,7 +212,7 @@
   .feuille .noteVider { margin: 6px 0 0; font-size: 13px; }
   .listeProjets { margin: 16px 0 0; }
   .gpsLigne { display: flex; gap: 8px; align-items: center; }
-  .gpsLigne input { flex: 1; }
+  .gpsLigne input { flex: 1; min-width: 0; }
   .gpsBtn { flex: none; font: inherit; font-size: 15px; font-weight: 600; padding: 12px; border-radius: 10px;
     border: 1px solid var(--primary); background: var(--surface); color: var(--text); white-space: nowrap; }
   .aideChamp { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
@@ -278,12 +278,14 @@
 
   <p class="vide" id="ficheInfo"></p>
 
+  <div id="blocMusique">
   <h2>Musique</h2>
   <button type="button" class="type shazam" id="lancerShazam">
     <span class="code">♪</span><span class="libelle">Reconnaître la musique</span><span class="badge" id="badgeMusique"></span>
   </button>
   <p class="vide" id="musiquesInfo"></p>
   <ul class="musiques" id="musiques"></ul>
+  </div>
 
   <h2>Contrôle avant de partir</h2>
   <p class="aideControle">Touche une ligne à compléter pour prendre la photo ou ouvrir la fiche.</p>
@@ -296,7 +298,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 12.2 – Terrain EINS (micro du limiteur dans Régie)</p>
+  <p class="version">Version 13.0 – Terrain EINS (mode Émergence)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -316,6 +318,11 @@
 <div class="voile" id="voileProjet">
   <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="projetTitre">
     <div class="feuilleTete"><h3 id="projetTitre">Chantier</h3><button type="button" class="croix" id="projetCroix" aria-label="Fermer">×</button></div>
+    <p>Type d’étude :</p>
+    <div class="puces" id="choixMode" role="group" aria-label="Type d’étude">
+      <button type="button" data-mode="eins" aria-pressed="true">EINS (musique)</button>
+      <button type="button" data-mode="emergence" aria-pressed="false">Émergence (PAC, CTA, padel…)</button>
+    </div>
     <p>Choisis l’affaire du CRM plus bas, ou tape un nom (ex. Tetou Juan-les-Pins). Les photos seront rangées dans un dossier à ce nom.</p>
     <input id="champProjet" type="text" autocomplete="off" autocapitalize="words" enterkeyhint="done">
     <div class="actions">
@@ -399,10 +406,46 @@
     ]}
   ];
 
+  /* Mode Émergence (PAC, CTA, padel, station de lavage…) : mêmes noms de fichiers que le skill « rapport-emergence-fa » */
+  const TYPES_EMERGENCE = [
+    { section: 'Calibration', items: [
+      { id: 'calibration-avant', code: 'CA', libelle: 'Calibration avant' },
+      { id: 'calibration-apres', code: 'CP', libelle: 'Calibration après' }
+    ]},
+    { section: 'Équipements', items: [
+      { id: 'equipement-1', code: 'Q1', libelle: 'Équipement 1', demande: 'modele', aide: 'Marque et modèle (ex. Daikin ERGA08EV). Laisse vide si tu ne sais pas.' },
+      { id: 'equipement-2', code: 'Q2', libelle: 'Équipement 2', demande: 'modele', aide: 'Marque et modèle (ex. Daikin ERGA08EV). Laisse vide si tu ne sais pas.' },
+      { id: 'equipement-3', code: 'Q3', libelle: 'Équipement 3', demande: 'modele', aide: 'Marque et modèle (ex. Daikin ERGA08EV). Laisse vide si tu ne sais pas.' },
+      { id: 'equipement-4', code: 'Q4', libelle: 'Équipement 4', demande: 'modele', aide: 'Marque et modèle (ex. Daikin ERGA08EV). Laisse vide si tu ne sais pas.' },
+      { id: 'plaque', code: 'PS', libelle: 'Plaque signalétique' }
+    ]},
+    { section: 'Points de mesure', items: [
+      { id: 'voisin', code: 'V', libelle: 'Point chez le voisin' },
+      { id: 'voisin-2', code: 'V2', libelle: 'Point chez le voisin 2' },
+      { id: 'point-limite', code: 'LP', libelle: 'Point en limite de propriété' }
+    ]},
+    { section: 'Divers', items: [
+      { id: 'plan', code: 'PL', libelle: 'Plan / vue (source et points)' },
+      { id: 'meteo', code: 'MT', libelle: 'Capture météo' },
+      { id: 'autre', code: '…', libelle: 'Autre', demande: 'desc' }
+    ]}
+  ];
+
   const $ = (id) => document.getElementById(id);
-  const IDS = TYPES.flatMap((g) => g.items.map((t) => t.id)).sort((a, b) => b.length - a.length);
-  const TYPE_PAR_ID = Object.fromEntries(TYPES.flatMap((g) => g.items.map((t) => [t.id, t])));
+  const TOUS_TYPES = TYPES.concat(TYPES_EMERGENCE);
+  const IDS = [...new Set(TOUS_TYPES.flatMap((g) => g.items.map((t) => t.id)))].sort((a, b) => b.length - a.length);
+  // Les types communs (calibration, voisin, plan, autre) gardent le libellé du mode affiché
+  const TYPE_PAR_ID = Object.fromEntries(TOUS_TYPES.flatMap((g) => g.items.map((t) => [t.id, t])));
+  function typesDuMode() { return modeActuel() === 'emergence' ? TYPES_EMERGENCE : TYPES; }
+  function typeParId(id) { return typesDuMode().flatMap((g) => g.items).find((t) => t.id === id) || TYPE_PAR_ID[id]; }
   const BADGES = {};
+
+  /* ---------- Type d'étude du chantier : « eins » (par défaut) ou « emergence » ---------- */
+  function modeActuel() {
+    const p = typeof projetActif === 'function' ? projetActif() : null;
+    if (p) return p.mode || 'eins';
+    return lire('photoEins.mode', 'eins') || 'eins';
+  }
 
   const etat = {
     source: 'camera',
@@ -505,9 +548,12 @@
   });
 
   /* ---------- Boutons de types ---------- */
-  (function construire() {
+  function construire() {
     const racine = $('types');
-    TYPES.forEach((groupe) => {
+    racine.innerHTML = '';
+    Object.keys(BADGES).forEach((k) => delete BADGES[k]);
+    etat.modeAffiche = modeActuel();
+    typesDuMode().forEach((groupe) => {
       const h = document.createElement('h2');
       h.textContent = groupe.section;
       racine.appendChild(h);
@@ -527,7 +573,10 @@
       });
       racine.appendChild(grille);
     });
-  })();
+    // La musique ne concerne que les EINS
+    $('blocMusique').style.display = etat.modeAffiche === 'emergence' ? 'none' : '';
+  }
+  construire();
 
   function majSource(s) {
     etat.source = s;
@@ -546,7 +595,7 @@
       return;
     }
     $('feuilleTitre').textContent = t.libelle;
-    $('feuilleAide').textContent = t.demande === 'modele'
+    $('feuilleAide').textContent = t.aide ? t.aide : t.demande === 'modele'
       ? 'Marque et modèle (ex. Syrincs D8 Column). Laisse vide si tu ne sais pas.'
       : 'Décris en 2 ou 3 mots';
     const champ = $('feuilleChamp');
@@ -619,7 +668,13 @@
       photo.statut = 'attente';
       await Base.mettre(photo);          // gardée sur le téléphone avant tout envoi
       const cleF = photo.dossier || jourChantierMaintenant();
-      if (choix.type.id === 'voisin') enregistrerPosition('gps_voisin', cleF, true);
+      if (modeActuel() === 'emergence') {
+        // Émergence : position du point de mesure (voisin ou limite de propriété) et de la source
+        if (choix.type.id === 'voisin' || choix.type.id === 'point-limite') enregistrerPosition('gps_point', cleF, true);
+        else if (choix.type.id === 'voisin-2') enregistrerPosition('gps_point_2', cleF, true);
+        else if (/^equipement-/.test(choix.type.id)) enregistrerPosition('gps_source', cleF, true);
+      }
+      else if (choix.type.id === 'voisin') enregistrerPosition('gps_voisin', cleF, true);
       else if (choix.type.id === 'voisin-2') {
         // Photo Voisin 2 : on coche « 2e voisin : oui » dans la fiche s'il n'est pas déjà répondu.
         const f = lire('photoEins.fiche.' + cleF, {}) || {};
@@ -887,11 +942,18 @@
   function ouvrirProjet(apres) {
     etat.apresProjet = apres || null;
     $('champProjet').value = '';
+    majChoixMode();
     construireListeProjets();
     chargerAffaires();
     $('voileProjet').classList.add('ouvert');
     setTimeout(() => $('champProjet').focus(), 50);
   }
+
+  function modeChoisi() { return lire('photoEins.mode', 'eins') || 'eins'; }
+  function majChoixMode() {
+    [...$('choixMode').children].forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === modeChoisi()));
+  }
+  [...$('choixMode').children].forEach((b) => b.addEventListener('click', () => { ecrire('photoEins.mode', b.dataset.mode); majChoixMode(); }));
 
   function fermerProjet() {
     $('voileProjet').classList.remove('ouvert');
@@ -910,7 +972,7 @@
     const maintenant = new Date();
     const hhmm = deux(maintenant.getHours()) + deux(maintenant.getMinutes());
     // Dossier Drive : « Nom du projet_AAAA-MM-JJ_HHmm » (journée de chantier + heure de début)
-    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm };
+    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm, mode: modeChoisi() };
     ecrire('photoEins.projet', etat.projet);
     memoriserProjet(etat.projet);
     fermerProjet();
@@ -918,7 +980,7 @@
 
   function projetsConnus() {
     const liste = (lire('photoEins.projets', []) || []).slice();
-    const ajouter = (p) => { if (p && p.dossier && !liste.some((x) => x.dossier === p.dossier)) liste.push({ nom: p.nom, jour: p.jour, dossier: p.dossier }); };
+    const ajouter = (p) => { if (p && p.dossier && !liste.some((x) => x.dossier === p.dossier)) liste.push({ nom: p.nom, jour: p.jour, dossier: p.dossier, mode: p.mode || 'eins' }); };
     if (etat.projet) ajouter(etat.projet);
     etat.photos.forEach((p) => {
       if (!p.dossier) return;
@@ -929,7 +991,7 @@
   }
   function memoriserProjet(p) {
     const liste = projetsConnus().filter((x) => x.dossier !== p.dossier);
-    liste.unshift({ nom: p.nom, jour: p.jour, dossier: p.dossier });
+    liste.unshift({ nom: p.nom, jour: p.jour, dossier: p.dossier, mode: p.mode || 'eins' });
     ecrire('photoEins.projets', liste.slice(0, 20));
   }
   async function chargerAffaires() {
@@ -948,7 +1010,7 @@
     const j = jourChantierMaintenant();
     const maintenant = new Date();
     const hhmm = deux(maintenant.getHours()) + deux(maintenant.getMinutes());
-    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm, crm: a.url || '' };
+    etat.projet = { nom: nom, jour: j, dossier: nom + '_' + j + '_' + hhmm, crm: a.url || '', mode: modeChoisi() };
     ecrire('photoEins.projet', etat.projet);
     memoriserProjet(etat.projet);
     // Lien vers l'affaire du CRM, enregistré dans la fiche (envoyé avec elle)
@@ -999,10 +1061,10 @@
       const m = (p.jour || '').match(/(\d{4})-(\d{2})-(\d{2})/);
       b.textContent = p.nom;
       const d = document.createElement('span');
-      d.textContent = m ? m[3] + '/' + m[2] : '';
+      d.textContent = (p.mode === 'emergence' ? 'Émergence · ' : '') + (m ? m[3] + '/' + m[2] : '');
       b.appendChild(d);
       b.addEventListener('click', () => {
-        etat.projet = { nom: p.nom, jour: p.jour, dossier: p.dossier, actif: jourChantierMaintenant() };
+        etat.projet = { nom: p.nom, jour: p.jour, dossier: p.dossier, actif: jourChantierMaintenant(), mode: p.mode || 'eins' };
         ecrire('photoEins.projet', etat.projet);
         memoriserProjet(etat.projet);
         fermerProjet();
@@ -1024,6 +1086,7 @@
   });
 
   function majCompteurs() {
+    if (etat.modeAffiche !== modeActuel()) construire();   // le chantier a changé de type d'étude
     const aujourdhui = jour();
     const projet = projetActif();
 
@@ -1065,7 +1128,7 @@
     majControle(compte);
 
     const depuis = $('depuis');
-    depuis.textContent = projet ? 'Chantier : ' + projet.nom : 'Aucun chantier';
+    depuis.textContent = (projet ? 'Chantier : ' + projet.nom : 'Aucun chantier') + (modeActuel() === 'emergence' ? ' · Émergence' : ' · EINS');
     depuis.className = projet ? 'projetActif' : '';
     $('nouveauChantier').textContent = projet ? 'Changer de chantier' : 'Choisir un chantier';
     $('reseau').textContent = navigator.onLine === false ? '(hors réseau)' : '';
@@ -1096,6 +1159,35 @@
     { id: 'ouverture', libelle: 'Horaires d’ouverture et de diffusion', type: 'texte', aide: 'ce que dit le client' },
     { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout ce qui peut servir au rapport (dictée possible)' }
   ];
+  /* Fiche du mode Émergence (champs lus par le skill « rapport-emergence-fa » : ne pas les renommer sans le signaler) */
+  const CHAMPS_EMERGENCE = [
+    { id: 'source_type', libelle: 'Source étudiée', type: 'texte', aide: 'PAC, climatisation, CTA, padel, station de lavage…', requis: true },
+    { id: 'source_marque_modele', libelle: 'Marque et modèle', type: 'texte', aide: 'si plusieurs : séparer par « ; »' },
+    { id: 'source_nombre', libelle: 'Nombre d’équipements / de terrains', type: 'nombre', requis: true },
+    { id: 'implantation', libelle: 'Implantation de la source', type: 'texte', aide: 'toiture, jardin, façade nord, sens de soufflage…' },
+    { id: 'pilotage', libelle: 'Marche / arrêt de la source par', type: 'choix', options: ['moi', 'le client', 'fonctionnement automatique'], requis: true },
+    { id: 'regime', libelle: 'Régime pendant les mesures', type: 'texte', aide: 'pleine puissance, mode chauffage, 3 terrains occupés…', requis: true },
+    { id: 'regime_verifie', libelle: 'Ce régime est…', type: 'choix', options: ['vérifié sur site', 'déclaré par le client'], requis: true },
+    { id: 'fonctionnement', libelle: 'Fonctionnement', type: 'choix', options: ['continu', 'cyclique', 'intermittent'] },
+    { id: 'duree_jour', libelle: 'Durée de fonctionnement 7h-22h (selon le client)', type: 'texte', aide: 'ex. 10 h, 45 min, en continu' },
+    { id: 'duree_nuit', libelle: 'Durée de fonctionnement 22h-7h (selon le client)', type: 'texte', aide: 'ex. 2 h, aucune' },
+    { id: 'seq_ambiant_jour', libelle: 'Ambiant diurne (source en marche)', type: 'plage' },
+    { id: 'seq_residuel_jour', libelle: 'Résiduel diurne (source à l’arrêt)', type: 'plage' },
+    { id: 'seq_ambiant_nuit', libelle: 'Ambiant nocturne (source en marche)', type: 'plage' },
+    { id: 'seq_residuel_nuit', libelle: 'Résiduel nocturne (source à l’arrêt)', type: 'plage' },
+    { id: 'point_type', libelle: 'Point de mesure', type: 'choix', options: ['extérieur', 'intérieur'], requis: true },
+    { id: 'point_position', libelle: 'Position du point', type: 'texte', aide: 'limite de propriété au nord, jardin du voisin, chambre…', requis: true },
+    { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', si: (f) => f.point_type === 'intérieur' },
+    { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], si: (f) => f.point_type === 'intérieur' },
+    { id: 'distance', libelle: 'Distance source / point (m)', type: 'nombre' },
+    { id: 'gps_point', libelle: 'Position GPS du point de mesure', type: 'gps', aide: 'Enregistrée seule avec la photo du point, ou touche « Ici »' },
+    { id: 'gps_point_2', libelle: 'Position GPS du point chez le voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2', si: (f) => !!f.gps_point_2 || voisin2Pris() },
+    { id: 'gps_source', libelle: 'Position GPS de la source', type: 'gps', aide: 'Enregistrée seule avec la 1re photo d’équipement, ou touche « Ici »' },
+    { id: 'vent', libelle: 'Vent', type: 'texte', aide: 'direction et force ressentie (ex. faible, du nord)' },
+    { id: 'evenements', libelle: 'Bruits parasites observés', type: 'zone', aide: 'voitures, chiens, voix, avion… (dictée possible)' },
+    { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout ce qui peut servir au rapport (dictée possible)' }
+  ];
+  function champsFiche() { return modeActuel() === 'emergence' ? CHAMPS_EMERGENCE : CHAMPS_FICHE; }
   etat.fiche = {};
 
   function cleFiche() { const p = projetActif(); return p ? p.dossier : jourChantierMaintenant(); }
@@ -1107,7 +1199,7 @@
     return noms.some((n) => typeDeNom(n) === 'voisin-2');
   }
   function champVisible(c) { return !c.si || c.si(etat.fiche); }
-  function ficheRemplie() { return CHAMPS_FICHE.filter((c) => c.requis && champVisible(c)).every((c) => String(etat.fiche[c.id] || '').trim()); }
+  function ficheRemplie() { return champsFiche().filter((c) => c.requis && champVisible(c)).every((c) => String(etat.fiche[c.id] || '').trim()); }
 
   /* ---------- Position GPS (gardée dans la fiche du chantier) ---------- */
   function distanceGps(a, b) {
@@ -1147,7 +1239,7 @@
   function construireFiche() {
     const racine = $('ficheChamps');
     racine.innerHTML = '';
-    CHAMPS_FICHE.forEach((c) => {
+    champsFiche().forEach((c) => {
       if (!champVisible(c)) return;
       const bloc = document.createElement('div');
       bloc.className = 'champFiche';
@@ -1169,7 +1261,7 @@
             const nv = sel.includes(o) ? sel.filter((x) => x !== o) : sel.concat(o);
             etat.fiche[c.id] = c.options.filter((x) => nv.includes(x)).join(', ');
             b.setAttribute('aria-pressed', nv.includes(o));
-            if (CHAMPS_FICHE.some((x) => x.si)) {   // affiche ou masque les champs qui dépendent du lieu
+            if (champsFiche().some((x) => x.si)) {   // affiche ou masque les champs qui dépendent du lieu
               const haut = $('ficheChamps').closest('.feuille').scrollTop;
               construireFiche();
               $('ficheChamps').closest('.feuille').scrollTop = haut;
@@ -1189,7 +1281,7 @@
           b.addEventListener('click', () => {
             etat.fiche[c.id] = etat.fiche[c.id] === o ? '' : o;
             [...puces.children].forEach((x) => x.setAttribute('aria-pressed', x.textContent === etat.fiche[c.id]));
-            if (CHAMPS_FICHE.some((x) => x.si)) {   // affiche ou masque les champs qui dépendent de ce choix
+            if (champsFiche().some((x) => x.si)) {   // affiche ou masque les champs qui dépendent de ce choix
               const haut = $('ficheChamps').closest('.feuille').scrollTop;
               construireFiche();
               $('ficheChamps').closest('.feuille').scrollTop = haut;
@@ -1232,6 +1324,32 @@
         champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value.trim() || 'oui'; });
         bloc.append(puces, champ);
         maj();
+      } else if (c.type === 'plage') {
+        // Séquence de mesure : « 17h15-17h45 ». Les boutons notent l'heure du téléphone, le champ reste modifiable.
+        const ligne = document.createElement('div');
+        ligne.className = 'gpsLigne';
+        const champ = document.createElement('input');
+        champ.type = 'text';
+        champ.placeholder = 'ex. 17h15-17h45';
+        champ.value = etat.fiche[c.id] || '';
+        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
+        const heure = () => { const d = new Date(); return deux(d.getHours()) + 'h' + deux(d.getMinutes()); };
+        const bouton = (txt, i) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'gpsBtn';
+          b.textContent = txt;
+          b.addEventListener('click', () => {
+            const p = String(etat.fiche[c.id] || '').split('-');
+            p[i] = heure();
+            if (i === 1 && !p[0]) p[0] = '?';
+            etat.fiche[c.id] = i === 0 ? p[0] + (p[1] ? '-' + p[1] : '') : p[0] + '-' + p[1];
+            champ.value = etat.fiche[c.id];
+          });
+          return b;
+        };
+        ligne.append(champ, bouton('▶ Début', 0), bouton('■ Fin', 1));
+        bloc.appendChild(ligne);
       } else if (c.type === 'gps') {
         const ligne = document.createElement('div');
         ligne.className = 'gpsLigne';
@@ -1266,7 +1384,8 @@
         }
         champ.placeholder = c.aide || '';
         if (c.id === 'distance') {
-          const d = distanceGps(etat.fiche.gps_voisin, etat.fiche.gps_etablissement);
+          const d = modeActuel() === 'emergence' ? distanceGps(etat.fiche.gps_point, etat.fiche.gps_source)
+                                                  : distanceGps(etat.fiche.gps_voisin, etat.fiche.gps_etablissement);
           if (d !== null) champ.placeholder = 'GPS : environ ' + d + ' m';
         }
         champ.value = etat.fiche[c.id] || '';
@@ -1281,7 +1400,7 @@
     if (!etat.config) { ouvrirReglages(); return; }
     chargerFiche();
     const p = projetActif();
-    $('ficheTitre').textContent = 'Fiche terrain' + (p ? ' – ' + p.nom : '');
+    $('ficheTitre').textContent = (modeActuel() === 'emergence' ? 'Fiche émergence' : 'Fiche terrain') + (p ? ' – ' + p.nom : '');
     $('ficheMessage').textContent = '';
     $('ficheMessage').className = 'message';
     construireFiche();
@@ -1294,6 +1413,7 @@
     const { maj, ...sansMaj } = etat.fiche;
     const { maj: m2, ...avantSansMaj } = JSON.parse(avant);
     if (JSON.stringify(sansMaj) === JSON.stringify(avantSansMaj)) return;   // rien de changé
+    etat.fiche.type_etude = modeActuel();
     etat.fiche.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, etat.fiche);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
@@ -1304,6 +1424,7 @@
   $('ficheEnregistrer').addEventListener('click', () => {
     // Enregistre sur le téléphone, ferme, puis envoie. Le badge du bouton Fiche montre « à envoyer » ou ✓.
     const cle = cleFiche();
+    etat.fiche.type_etude = modeActuel();
     etat.fiche.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, etat.fiche);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
@@ -1344,7 +1465,15 @@
   function majControle(compte) {
     const a = (id) => !!compte[id];
     // [texte, fait, obligatoire, action quand on touche la ligne : type de photo, 'musique' ou 'fiche']
-    const items = [
+    const items = modeActuel() === 'emergence' ? [
+      ['Photo de la calibration avant mesures', a('calibration-avant'), true, 'calibration-avant'],
+      ['Photo d’au moins un équipement', ['equipement-1', 'equipement-2', 'equipement-3', 'equipement-4'].some(a), true, 'equipement-1'],
+      ['Photo de la plaque signalétique', a('plaque'), false, 'plaque'],
+      ['Photo du point de mesure (voisin ou limite de propriété)', a('voisin') || a('point-limite'), true, 'voisin'],
+      ['Plan ou vue avec la source et les points', a('plan'), false, 'plan'],
+      ['Fiche émergence remplie', ficheRemplie(), true, 'fiche'],
+      ['Photo de la calibration après mesures', a('calibration-apres'), true, 'calibration-apres']
+    ] : [
       ['Photo de la calibration avant mesures', a('calibration-avant'), true, 'calibration-avant'],
       ['Photo d’au moins une enceinte ou un caisson', ['enceinte-1', 'enceinte-2', 'enceinte-3', 'enceinte-4', 'caisson-1', 'caisson-2'].some(a), true, 'enceinte-1'],
       ['Photo de la table de mixage', a('table-mixage'), false, 'table-mixage'],
@@ -1379,7 +1508,7 @@
         b.addEventListener('click', () => {
           if (action === 'fiche') $('ouvrirFiche').click();
           else if (action === 'musique') $('lancerShazam').click();
-          else choisir(TYPE_PAR_ID[action]);
+          else choisir(typeParId(action));
         });
         li.appendChild(b);
       }
