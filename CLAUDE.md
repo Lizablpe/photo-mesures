@@ -75,6 +75,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
   v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
   v12.2 : bouton « Micro du limiteur » déplacé dans Régie (nom de fichier inchangé : `micro-limiteur`).
+- v13.4 : distance du voisin masquée dans la fiche EINS, calculée seule depuis le GPS (gps_voisin ↔ gps_etablissement ; en émergence gps_point ↔ gps_source) et enregistrée dans `distance` (+ `distance_origine` = « GPS »). Absente si une des deux positions manque.
+- v13.3 : bouton 🗑 dans « Reprendre un chantier » (retire le chantier de l'appli seulement, refusé si photo ou fiche non envoyée ; rien n'est effacé du Drive). Libellé du champ `portes` : « Portes de l’établissement pendant l’étude… » (id et valeurs inchangés).
 - v13.2 : séquences EINS (résiduel, ambiant, défavorable, limiteur) et bouton unique lecture / arrêt dans les deux modes.
 - v13.1 : fiche émergence allégée (le reste se demande au client après).
 - v13 : mode Émergence (type d'étude par chantier, boutons et fiche propres, séquences avec boutons Début / Fin, contrôle adapté).

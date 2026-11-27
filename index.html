@@ -223,6 +223,9 @@
     text-align: left; padding: 12px; margin: 0 0 8px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--surface); color: var(--text); }
   .listeProjets button span { color: var(--muted); font-size: 14px; }
+  .ligneProjet { display: flex; gap: 8px; align-items: stretch; }
+  .ligneProjet > button:first-child { flex: 1; }
+  .listeProjets button.supprProjet { width: auto; flex: none; justify-content: center; align-items: center; padding: 12px 14px; color: #B3261E; }
   .visionneuse { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.92); display: none;
     flex-direction: column; align-items: center; justify-content: center; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
   .visionneuse.ouvert { display: flex; }
@@ -299,7 +302,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 13.2 – Terrain EINS (séquences lecture / arrêt)</p>
+  <p class="version">Version 13.4 – Terrain EINS (distance calculée, masquée)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -1070,8 +1073,42 @@
         memoriserProjet(etat.projet);
         fermerProjet();
       });
-      div.appendChild(b);
+      const ligne = document.createElement('div');
+      ligne.className = 'ligneProjet';
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'supprProjet';
+      x.setAttribute('aria-label', 'Retirer ' + p.nom + ' de la liste');
+      x.textContent = '🗑';
+      x.addEventListener('click', () => supprimerChantier(p));
+      ligne.append(b, x);
+      div.appendChild(ligne);
     });
+  }
+
+  /* Retire un chantier de l'appli (liste, photos envoyées et fiche gardées sur le téléphone). Rien n'est effacé du Drive.
+     Refusé tant qu'une photo ou la fiche du chantier n'est pas arrivée dans le Drive. */
+  async function supprimerChantier(p) {
+    const photos = etat.photos.filter((x) => x.dossier === p.dossier);
+    const attente = photos.filter((x) => x.statut !== 'ok').length;
+    const ficheAttente = !!(lire('photoEins.ficheAEnvoyer', {}) || {})[p.dossier];
+    if (attente || ficheAttente) {
+      alert('« ' + p.nom + ' » ne peut pas être retiré : ' +
+        (attente ? attente + ' photo(s) ' : '') + (attente && ficheAttente ? 'et ' : '') + (ficheAttente ? 'la fiche ' : '') +
+        'ne sont pas encore arrivées dans le Drive. Réessaie une fois l’envoi terminé.');
+      return;
+    }
+    const pasDansPhotos = photos.filter((x) => x.b64 && !x.galerie).length;
+    let texte = 'Retirer le chantier « ' + p.nom + ' » de l’appli ?\n\nSes photos et sa fiche restent dans le Drive.';
+    if (pasDansPhotos) texte += '\n\nAttention : ' + pasDansPhotos + ' photo(s) ne sont pas enregistrées dans Photos et ne pourront plus l’être depuis l’appli (elles resteront dans le Drive).';
+    if (!confirm(texte)) return;
+    for (const x of photos) await Base.retirer(x.nom);
+    etat.photos = etat.photos.filter((x) => x.dossier !== p.dossier);
+    try { localStorage.removeItem('photoEins.fiche.' + p.dossier); } catch (e) {}
+    if (etat.projet && etat.projet.dossier === p.dossier) { etat.projet = null; ecrire('photoEins.projet', null); }
+    ecrire('photoEins.projets', (lire('photoEins.projets', []) || []).filter((x) => x.dossier !== p.dossier));
+    construireListeProjets();
+    afficher();
   }
 
   $('nouveauChantier').addEventListener('click', () => ouvrirProjet(null));
@@ -1146,9 +1183,8 @@
     { id: 'lieu', libelle: 'Lieu (plusieurs choix possibles si plusieurs zones)', type: 'multi', options: ['clos', 'ouvert'], requis: true },
     { id: 'zone_close', libelle: 'Zone close', type: 'texte', aide: 'ex. salle intérieure', requis: true, si: (f) => lieuMixte(f) },
     { id: 'zone_ouverte', libelle: 'Zone ouverte', type: 'texte', aide: 'ex. terrasse, jardin', requis: true, si: (f) => lieuMixte(f) },
-    { id: 'portes', libelle: 'Portes pendant la diffusion', type: 'choix', options: ['fermées', 'ouvertes'], requis: true },
+    { id: 'portes', libelle: 'Portes de l’établissement pendant l’étude (si la porte est ouverte parfois quand l’établissement tourne, ouvrir la porte)', type: 'choix', options: ['fermées', 'ouvertes'], requis: true },
     { id: 'voisin', libelle: 'Position du voisin', type: 'choix', options: ['au-dessus', 'mitoyen', 'bâtiment distinct', 'limite de propriété (pas d’accès)'], requis: true },
-    { id: 'distance', libelle: 'Distance du voisin (m)', type: 'nombre' },
     { id: 'gps_voisin', libelle: 'Position GPS du voisin', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin, ou touche « Ici » sur place' },
     { id: 'deux_voisins', libelle: 'Un 2e voisin chez qui mesurer ?', type: 'choix', options: ['oui', 'non'] },
     { id: 'gps_voisin_2', libelle: 'Position GPS du voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2, ou touche « Ici » sur place', si: (f) => f.deux_voisins === 'oui' || (f.deux_voisins !== 'non' && (!!f.gps_voisin_2 || voisin2Pris())) },
@@ -1230,6 +1266,13 @@
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
     });
   }
+  // Distance calculée à partir des positions GPS, gardée dans la fiche sans être affichée (champ « distance », en m).
+  function majDistance(f) {
+    const d = (f.gps_point && f.gps_source) ? distanceGps(f.gps_point, f.gps_source)
+            : (f.gps_voisin && f.gps_etablissement) ? distanceGps(f.gps_voisin, f.gps_etablissement) : null;
+    if (d !== null) { f.distance = String(d); f.distance_origine = 'GPS'; }
+    return f;
+  }
   async function enregistrerPosition(champ, cle, seulementSiVide) {
     const fiche = lire('photoEins.fiche.' + cle, {}) || {};
     if (seulementSiVide && fiche[champ]) return;
@@ -1238,6 +1281,7 @@
     const f = lire('photoEins.fiche.' + cle, {}) || {};     // relue : la fiche a pu changer pendant la mesure GPS
     if (seulementSiVide && f[champ]) return;
     f[champ] = pos;
+    majDistance(f);
     f.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, f);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
@@ -1430,6 +1474,7 @@
     const { maj: m2, ...avantSansMaj } = JSON.parse(avant);
     if (JSON.stringify(sansMaj) === JSON.stringify(avantSansMaj)) return;   // rien de changé
     etat.fiche.type_etude = modeActuel();
+    majDistance(etat.fiche);
     etat.fiche.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, etat.fiche);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
@@ -1441,6 +1486,7 @@
     // Enregistre sur le téléphone, ferme, puis envoie. Le badge du bouton Fiche montre « à envoyer » ou ✓.
     const cle = cleFiche();
     etat.fiche.type_etude = modeActuel();
+    majDistance(etat.fiche);
     etat.fiche.maj = new Date().toISOString();
     ecrire('photoEins.fiche.' + cle, etat.fiche);
     ecrire('photoEins.ficheAEnvoyer', Object.assign(lire('photoEins.ficheAEnvoyer', {}) || {}, { [cle]: true }));
