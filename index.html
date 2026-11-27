@@ -213,6 +213,7 @@
   .listeProjets { margin: 16px 0 0; }
   .gpsLigne { display: flex; gap: 8px; align-items: center; }
   .gpsLigne input { flex: 1; min-width: 0; }
+  .gpsBtn.enCours { background: #B3261E; color: #fff; border-color: #B3261E; }
   .gpsBtn { flex: none; font: inherit; font-size: 15px; font-weight: 600; padding: 12px; border-radius: 10px;
     border: 1px solid var(--primary); background: var(--surface); color: var(--text); white-space: nowrap; }
   .aideChamp { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
@@ -298,7 +299,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 13.0 – Terrain EINS (mode Émergence)</p>
+  <p class="version">Version 13.2 – Terrain EINS (séquences lecture / arrêt)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -1137,7 +1138,11 @@
 
   /* ---------- Fiche terrain (envoyée dans le dossier du chantier : fiche_terrain.json) ---------- */
   const CHAMPS_FICHE = [
-    { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'ex. 22h00-00h00', requis: true },
+    { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'rempli seul avec les séquences ci-dessous, ou ex. 22h00-00h00', requis: true },
+    { id: 'seq_residuel', libelle: 'Résiduel (musique coupée)', type: 'plage' },
+    { id: 'seq_ambiant', libelle: 'Ambiant chez le voisin (musique)', type: 'plage' },
+    { id: 'seq_defavorable', libelle: 'Point défavorable', type: 'plage' },
+    { id: 'seq_limiteur', libelle: 'Point limiteur', type: 'plage' },
     { id: 'lieu', libelle: 'Lieu (plusieurs choix possibles si plusieurs zones)', type: 'multi', options: ['clos', 'ouvert'], requis: true },
     { id: 'zone_close', libelle: 'Zone close', type: 'texte', aide: 'ex. salle intérieure', requis: true, si: (f) => lieuMixte(f) },
     { id: 'zone_ouverte', libelle: 'Zone ouverte', type: 'texte', aide: 'ex. terrasse, jardin', requis: true, si: (f) => lieuMixte(f) },
@@ -1161,32 +1166,37 @@
   ];
   /* Fiche du mode Émergence (champs lus par le skill « rapport-emergence-fa » : ne pas les renommer sans le signaler) */
   const CHAMPS_EMERGENCE = [
-    { id: 'source_type', libelle: 'Source étudiée', type: 'texte', aide: 'PAC, climatisation, CTA, padel, station de lavage…', requis: true },
-    { id: 'source_marque_modele', libelle: 'Marque et modèle', type: 'texte', aide: 'si plusieurs : séparer par « ; »' },
-    { id: 'source_nombre', libelle: 'Nombre d’équipements / de terrains', type: 'nombre', requis: true },
-    { id: 'implantation', libelle: 'Implantation de la source', type: 'texte', aide: 'toiture, jardin, façade nord, sens de soufflage…' },
-    { id: 'pilotage', libelle: 'Marche / arrêt de la source par', type: 'choix', options: ['moi', 'le client', 'fonctionnement automatique'], requis: true },
-    { id: 'regime', libelle: 'Régime pendant les mesures', type: 'texte', aide: 'pleine puissance, mode chauffage, 3 terrains occupés…', requis: true },
-    { id: 'regime_verifie', libelle: 'Ce régime est…', type: 'choix', options: ['vérifié sur site', 'déclaré par le client'], requis: true },
-    { id: 'fonctionnement', libelle: 'Fonctionnement', type: 'choix', options: ['continu', 'cyclique', 'intermittent'] },
-    { id: 'duree_jour', libelle: 'Durée de fonctionnement 7h-22h (selon le client)', type: 'texte', aide: 'ex. 10 h, 45 min, en continu' },
-    { id: 'duree_nuit', libelle: 'Durée de fonctionnement 22h-7h (selon le client)', type: 'texte', aide: 'ex. 2 h, aucune' },
+    // Seulement ce qui se voit ou se note sur place. Le reste (durées de fonctionnement, nombre, implantation…) se demande après.
+    // Marque et modèle : dans le nom des photos Équipement. GPS : enregistré seul avec les photos (gps_point, gps_point_2, gps_source).
+    { id: 'source_type', libelle: 'Source étudiée', type: 'texte', aide: 'PAC, climatisation, CTA, padel…' },
+    { id: 'regime', libelle: 'Régime pendant les mesures', type: 'texte', aide: 'ex. pleine puissance vérifiée, mode chauffage selon le client', requis: true },
     { id: 'seq_ambiant_jour', libelle: 'Ambiant diurne (source en marche)', type: 'plage' },
     { id: 'seq_residuel_jour', libelle: 'Résiduel diurne (source à l’arrêt)', type: 'plage' },
     { id: 'seq_ambiant_nuit', libelle: 'Ambiant nocturne (source en marche)', type: 'plage' },
     { id: 'seq_residuel_nuit', libelle: 'Résiduel nocturne (source à l’arrêt)', type: 'plage' },
     { id: 'point_type', libelle: 'Point de mesure', type: 'choix', options: ['extérieur', 'intérieur'], requis: true },
-    { id: 'point_position', libelle: 'Position du point', type: 'texte', aide: 'limite de propriété au nord, jardin du voisin, chambre…', requis: true },
-    { id: 'piece', libelle: 'Pièce du voisin', type: 'texte', aide: 'séjour, chambre…', si: (f) => f.point_type === 'intérieur' },
+    { id: 'point_position', libelle: 'Position du point', type: 'texte', aide: 'limite de propriété au nord, chambre du voisin…' },
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], si: (f) => f.point_type === 'intérieur' },
-    { id: 'distance', libelle: 'Distance source / point (m)', type: 'nombre' },
-    { id: 'gps_point', libelle: 'Position GPS du point de mesure', type: 'gps', aide: 'Enregistrée seule avec la photo du point, ou touche « Ici »' },
-    { id: 'gps_point_2', libelle: 'Position GPS du point chez le voisin 2', type: 'gps', aide: 'Enregistrée seule avec la photo Voisin 2', si: (f) => !!f.gps_point_2 || voisin2Pris() },
-    { id: 'gps_source', libelle: 'Position GPS de la source', type: 'gps', aide: 'Enregistrée seule avec la 1re photo d’équipement, ou touche « Ici »' },
-    { id: 'vent', libelle: 'Vent', type: 'texte', aide: 'direction et force ressentie (ex. faible, du nord)' },
-    { id: 'evenements', libelle: 'Bruits parasites observés', type: 'zone', aide: 'voitures, chiens, voix, avion… (dictée possible)' },
-    { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout ce qui peut servir au rapport (dictée possible)' }
+    { id: 'vent', libelle: 'Vent', type: 'texte', aide: 'ex. faible, du nord' },
+    { id: 'evenements', libelle: 'Bruits parasites', type: 'zone', aide: 'voitures, chiens, voix… (dictée possible)' },
+    { id: 'remarques', libelle: 'Remarques', type: 'zone', aide: 'tout le reste (dictée possible)' }
   ];
+  function horairesDepuisSequences() {
+    if (etat.fiche.horaires && !etat.fiche.horairesAuto) return;     // saisi à la main : on n'y touche pas
+    const min = (h) => { const m = String(h).match(/(\d{1,2})h(\d{2})/); if (!m) return null; let x = +m[1] * 60 + +m[2]; return x < 360 ? x + 1440 : x; };
+    const deb = [], fin = [];
+    Object.keys(etat.fiche).filter((k) => k.indexOf('seq_') === 0).forEach((k) => {
+      const [d, f] = String(etat.fiche[k]).split('-');
+      if (min(d) !== null) deb.push([min(d), d]);
+      if (f && min(f) !== null) fin.push([min(f), f]);
+    });
+    if (!deb.length) return;
+    deb.sort((x, y) => x[0] - y[0]); fin.sort((x, y) => y[0] - x[0]);
+    etat.fiche.horaires = deb[0][1] + (fin.length ? '-' + fin[0][1] : '');
+    etat.fiche.horairesAuto = true;
+    const ch = [...$('ficheChamps').querySelectorAll('input')].find((i) => i.dataset.id === 'horaires');
+    if (ch) ch.value = etat.fiche.horaires;
+  }
   function champsFiche() { return modeActuel() === 'emergence' ? CHAMPS_EMERGENCE : CHAMPS_FICHE; }
   etat.fiche = {};
 
@@ -1334,21 +1344,26 @@
         champ.value = etat.fiche[c.id] || '';
         champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
         const heure = () => { const d = new Date(); return deux(d.getHours()) + 'h' + deux(d.getMinutes()); };
-        const bouton = (txt, i) => {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'gpsBtn';
-          b.textContent = txt;
-          b.addEventListener('click', () => {
-            const p = String(etat.fiche[c.id] || '').split('-');
-            p[i] = heure();
-            if (i === 1 && !p[0]) p[0] = '?';
-            etat.fiche[c.id] = i === 0 ? p[0] + (p[1] ? '-' + p[1] : '') : p[0] + '-' + p[1];
-            champ.value = etat.fiche[c.id];
-          });
-          return b;
-        };
-        ligne.append(champ, bouton('▶ Début', 0), bouton('■ Fin', 1));
+        // Un seul bouton : ▶ note le début, ■ note la fin (comme lecture / arrêt)
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'gpsBtn';
+        const enCours = () => { const v = String(etat.fiche[c.id] || ''); return !!v && !v.includes('-'); };
+        const majBouton = () => { b.textContent = enCours() ? '■ Fin' : '▶ Début'; b.classList.toggle('enCours', enCours()); };
+        b.addEventListener('click', () => {
+          const v = String(etat.fiche[c.id] || '');
+          if (enCours()) etat.fiche[c.id] = v + '-' + heure();
+          else {
+            if (v && !confirm('Recommencer cette séquence ? Les horaires notés (' + v + ') seront remplacés.')) return;
+            etat.fiche[c.id] = heure();
+          }
+          champ.value = etat.fiche[c.id];
+          majBouton();
+          if (c.id.indexOf('seq_') === 0 && champsFiche().some((x) => x.id === 'horaires')) horairesDepuisSequences();
+        });
+        champ.addEventListener('input', majBouton);
+        majBouton();
+        ligne.append(champ, b);
         bloc.appendChild(ligne);
       } else if (c.type === 'gps') {
         const ligne = document.createElement('div');
@@ -1389,7 +1404,8 @@
           if (d !== null) champ.placeholder = 'GPS : environ ' + d + ' m';
         }
         champ.value = etat.fiche[c.id] || '';
-        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; });
+        champ.dataset.id = c.id;
+        champ.addEventListener('input', () => { etat.fiche[c.id] = champ.value; if (c.id === 'horaires') delete etat.fiche.horairesAuto; });
         bloc.appendChild(champ);
       }
       racine.appendChild(bloc);

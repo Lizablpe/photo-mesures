@@ -38,7 +38,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - Photos : `AAAA-MM-JJ_HHmm_<type>[_Marque Modèle][_n].jpg`. Types : `voisin`, `voisin-2`, `P1-defavorable(-2..4)`, `P2-limiteur(-2)`,
   `micro-limiteur`, `calibration-avant`, `calibration-apres`, `enceinte-1..4`, `caisson-1..2`, `table-mixage`, `ampli-1..2`,
   `plan`, `autre-<description>`. (`facade` a été retiré en v10, mais il existe dans d'anciens dossiers.)
-- Fiche (`CHAMPS_FICHE`) : horaires, lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
+- Fiche (`CHAMPS_FICHE`) : horaires (rempli seul depuis les séquences tant qu'il n'est pas saisi à la main, `horairesAuto`),
+  seq_residuel, seq_ambiant, seq_defavorable, seq_limiteur (v13.2, « 22h05-22h20 », bouton unique ▶ Début / ■ Fin), lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
   sont cochés), portes, voisin, distance, gps_voisin, deux_voisins (« oui » / « non », mis à « oui » par la photo Voisin 2),
   gps_voisin_2 (visible si deux_voisins = « oui »), gps_etablissement, piece, fenetre, audible,
   sono, zones, limiteur (« non », « oui » ou marque + modèle), capacite, ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
@@ -48,10 +49,9 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - **Mode Émergence (v13)** : choisi à la création du chantier (« Type d'étude » : EINS / Émergence), gardé dans le projet (`mode`)
   et dans `photoEins.mode` pour « Sans projet ». Types photo (`TYPES_EMERGENCE`) : `calibration-avant`, `calibration-apres`,
   `equipement-1..4` (+ marque et modèle), `plaque`, `voisin`, `voisin-2`, `point-limite`, `plan`, `meteo`, `autre-<description>`.
-  Fiche (`CHAMPS_EMERGENCE`) : source_type, source_marque_modele, source_nombre, implantation, pilotage, regime, regime_verifie,
-  fonctionnement, duree_jour, duree_nuit, seq_ambiant_jour, seq_residuel_jour, seq_ambiant_nuit, seq_residuel_nuit (« 17h15-17h45 »,
-  boutons Début / Fin), point_type, point_position, piece, fenetre, distance, gps_point, gps_point_2, gps_source, vent, evenements,
-  remarques, et `type_etude` = « emergence » (ajouté à l'enregistrement). GPS auto : photo voisin / point-limite → gps_point,
+  Fiche (`CHAMPS_EMERGENCE`, allégée en v13.1) : source_type, regime, seq_ambiant_jour, seq_residuel_jour, seq_ambiant_nuit,
+  seq_residuel_nuit (« 17h15-17h45 », bouton ▶ / ■), point_type, point_position, fenetre (si intérieur), vent, evenements,
+  remarques, et `type_etude` = « emergence » (ajouté à l'enregistrement). Champs GPS non affichés mais enregistrés seuls. GPS auto : photo voisin / point-limite → gps_point,
   voisin-2 → gps_point_2, 1re photo équipement → gps_source. Pas de section Musique en mode Émergence.
   Ces noms sont lus par le skill « rapport-emergence-fa » (projet claude.ai « Rapport Emergence »).
 - Textes de l'interface en français, typographie française (’ « »).
@@ -75,6 +75,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
   v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
   v12.2 : bouton « Micro du limiteur » déplacé dans Régie (nom de fichier inchangé : `micro-limiteur`).
+- v13.2 : séquences EINS (résiduel, ambiant, défavorable, limiteur) et bouton unique lecture / arrêt dans les deux modes.
+- v13.1 : fiche émergence allégée (le reste se demande au client après).
 - v13 : mode Émergence (type d'étude par chantier, boutons et fiche propres, séquences avec boutons Début / Fin, contrôle adapté).
 
 ## En attente
