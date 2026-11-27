@@ -302,7 +302,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 13.5 – Terrain EINS (séquences par zone et par point)</p>
+  <p class="version">Version 14.0 – Terrain EINS (chantiers partagés)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -949,6 +949,7 @@
     majChoixMode();
     construireListeProjets();
     chargerAffaires();
+    chargerChantiers();
     $('voileProjet').classList.add('ouvert');
     setTimeout(() => $('champProjet').focus(), 50);
   }
@@ -1008,6 +1009,42 @@
       if (Array.isArray(j) && j.every((x) => x && typeof x === 'object' && x.nom)) { ecrire('photoEins.affaires', j); if ($('voileProjet').classList.contains('ouvert')) construireListeProjets(); }
     } catch (e) {}
   }
+  // Chantiers des 30 derniers jours présents dans le Drive (tous téléphones confondus). Ignoré si le script ne le gère pas.
+  async function chargerChantiers() {
+    if (!etat.config || navigator.onLine === false) return;
+    try {
+      const u = etat.config.url + '?action=chantiers&jours=30&k=' + encodeURIComponent(etat.config.cle);
+      const r = await fetch(u, { redirect: 'follow' });
+      const j = await r.json();
+      if (Array.isArray(j) && j.every((x) => x && typeof x === 'object' && x.dossier)) {
+        ecrire('photoEins.chantiersDrive', j);
+        if ($('voileProjet').classList.contains('ouvert')) construireListeProjets();
+      }
+    } catch (e) {}
+  }
+  // Récupère la fiche du chantier dans le Drive (remplie peut-être sur un autre téléphone).
+  // Elle remplace la fiche du téléphone si elle est plus récente et qu'aucune modification locale n'attend d'être envoyée.
+  async function synchroFiche(cle) {
+    if (!etat.config || navigator.onLine === false || !cle) return false;
+    if ((lire('photoEins.ficheAEnvoyer', {}) || {})[cle]) return false;
+    const ctrl = new AbortController();
+    const minuterie = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const estJour = /^\d{4}-\d{2}-\d{2}$/.test(cle);
+      const u = etat.config.url + '?action=fiche&k=' + encodeURIComponent(etat.config.cle) +
+        (estJour ? '&jour=' : '&dossier=') + encodeURIComponent(cle);
+      const r = await fetch(u, { redirect: 'follow', signal: ctrl.signal });
+      const j = await r.json();
+      if (!j || typeof j.fiche !== 'object' || !j.fiche) return false;
+      const locale = lire('photoEins.fiche.' + cle, {}) || {};
+      if (locale.maj && j.fiche.maj && j.fiche.maj <= locale.maj) return false;
+      if ((lire('photoEins.ficheAEnvoyer', {}) || {})[cle]) return false;   // modifiée pendant le chargement
+      ecrire('photoEins.fiche.' + cle, j.fiche);
+      return true;
+    } catch (e) { return false; }
+    finally { clearTimeout(minuterie); }
+  }
+
   function creerDepuisAffaire(a) {
     const nom = String(a.nom || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
     if (!nom) return;
@@ -1054,7 +1091,17 @@
       });
     }
     const actuel = projetActif();
-    const autres = projetsConnus().filter((p) => !actuel || p.dossier !== actuel.dossier);
+    // Chantiers du téléphone + chantiers récents du Drive (ceux de la collègue), sans doublon ni chantier masqué
+    const masques = new Set(lire('photoEins.masques', []) || []);
+    const locaux = projetsConnus();
+    const vus = new Set(locaux.map((p) => p.dossier));
+    const partages = (lire('photoEins.chantiersDrive', []) || [])
+      .filter((p) => p && p.dossier && !vus.has(p.dossier))
+      .map((p) => ({ nom: p.nom, jour: p.jour, dossier: p.dossier, mode: p.mode || 'eins', partage: true }));
+    const autres = locaux.concat(partages)
+      .filter((p) => (!actuel || p.dossier !== actuel.dossier) && !masques.has(p.dossier))
+      .sort((a, b) => b.dossier.slice(-15).localeCompare(a.dossier.slice(-15)))
+      .slice(0, 30);
     if (!autres.length) return;
     const h = document.createElement('h4');
     h.textContent = 'Reprendre un chantier';
@@ -1065,13 +1112,14 @@
       const m = (p.jour || '').match(/(\d{4})-(\d{2})-(\d{2})/);
       b.textContent = p.nom;
       const d = document.createElement('span');
-      d.textContent = (p.mode === 'emergence' ? 'Émergence · ' : '') + (m ? m[3] + '/' + m[2] : '');
+      d.textContent = (p.partage ? '☁︎ ' : '') + (p.mode === 'emergence' ? 'Émergence · ' : '') + (m ? m[3] + '/' + m[2] : '');
       b.appendChild(d);
       b.addEventListener('click', () => {
         etat.projet = { nom: p.nom, jour: p.jour, dossier: p.dossier, actif: jourChantierMaintenant(), mode: p.mode || 'eins' };
         ecrire('photoEins.projet', etat.projet);
         memoriserProjet(etat.projet);
         fermerProjet();
+        synchroFiche(p.dossier).then((ok) => { if (ok && !$('voileFiche').classList.contains('ouvert')) { chargerFiche(); afficher(); } });
       });
       const ligne = document.createElement('div');
       ligne.className = 'ligneProjet';
@@ -1089,6 +1137,16 @@
   /* Retire un chantier de l'appli (liste, photos envoyées et fiche gardées sur le téléphone). Rien n'est effacé du Drive.
      Refusé tant qu'une photo ou la fiche du chantier n'est pas arrivée dans le Drive. */
   async function supprimerChantier(p) {
+    const masquer = () => {
+      const m = lire('photoEins.masques', []) || [];
+      if (!m.includes(p.dossier)) m.push(p.dossier);
+      ecrire('photoEins.masques', m.slice(-200));
+    };
+    if (p.partage) {
+      // Chantier d'une autre personne, vu dans le Drive : on le retire seulement de la liste de ce téléphone.
+      if (!confirm('Masquer « ' + p.nom + ' » de ta liste ?\n\nRien n’est effacé : ses photos et sa fiche restent dans le Drive.')) return;
+      masquer(); construireListeProjets(); return;
+    }
     const photos = etat.photos.filter((x) => x.dossier === p.dossier);
     const attente = photos.filter((x) => x.statut !== 'ok').length;
     const ficheAttente = !!(lire('photoEins.ficheAEnvoyer', {}) || {})[p.dossier];
@@ -1107,6 +1165,7 @@
     try { localStorage.removeItem('photoEins.fiche.' + p.dossier); } catch (e) {}
     if (etat.projet && etat.projet.dossier === p.dossier) { etat.projet = null; ecrire('photoEins.projet', null); }
     ecrire('photoEins.projets', (lire('photoEins.projets', []) || []).filter((x) => x.dossier !== p.dossier));
+    masquer();
     construireListeProjets();
     afficher();
   }
@@ -1475,8 +1534,9 @@
     });
   }
 
-  $('ouvrirFiche').addEventListener('click', () => {
+  $('ouvrirFiche').addEventListener('click', async () => {
     if (!etat.config) { ouvrirReglages(); return; }
+    const cle = cleFiche();
     chargerFiche();
     const p = projetActif();
     $('ficheTitre').textContent = (modeActuel() === 'emergence' ? 'Fiche émergence' : 'Fiche terrain') + (p ? ' – ' + p.nom : '');
@@ -1484,7 +1544,16 @@
     $('ficheMessage').className = 'message';
     construireFiche();
     $('voileFiche').classList.add('ouvert');
+    // Version du Drive (autre téléphone) : rechargée seulement si rien n'a encore été modifié ici
+    const avant = JSON.stringify(etat.fiche);
+    if (await synchroFiche(cle) && cle === cleFiche() && JSON.stringify(etat.fiche) === avant) {
+      chargerFiche();
+      construireFiche();
+      $('ficheMessage').className = 'message ok';
+      $('ficheMessage').textContent = 'Fiche mise à jour depuis le Drive.';
+    }
   });
+
   function fermerFiche() {
     $('voileFiche').classList.remove('ouvert');
     const cle = cleFiche();

@@ -29,6 +29,8 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
 - `POST {k, fiche, dossier | jour}` : écrit `fiche_terrain.json` dans le dossier du chantier.
 - `GET ?action=lister&k=…` : fichiers déjà dans le Drive (pour le contrôle).
 - `GET ?action=musiques&k=…` : morceaux reconnus (Sheet « Historique Shazam »).
+- `GET ?action=chantiers&jours=30&k=…` (v14) : dossiers de projet des N derniers jours `[{dossier, nom, jour, mode}]`, mode lu dans `type_etude` de la fiche.
+- `GET ?action=fiche&dossier=…|jour=…&k=…` (v14) : `{fiche: objet | null}` (lecture de fiche_terrain.json).
 - `GET ?action=affaires&k=…` : affaires « Gagné » du CRM Notion. **Pas encore active** (voir « En attente »).
 - La clé `k` est dans le lien collé dans Réglages (`…/exec?k=…`). **Ne jamais l'écrire dans le dépôt.**
 - Drive : `Drive partagés / 04 ETUDES ACOUSTIQUES / Fichier applis / Photo terrain` (ID `1dXeJ9GJH-L-BgPgS2DVNMvL6lBFMDzNu`).
@@ -45,7 +47,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   sono, zones, limiteur (« non », « oui » ou marque + modèle), capacite, ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
 - GPS : format `"lat, lon (±précision m)"`. Il s'enregistre seul à la photo Voisin, et à la 1re photo P1 / P2 pour l'établissement.
 - Stockage local : IndexedDB `photo-eins` (store `photos`) et localStorage `photoEins.*`
-  (config, projet, projets, fiche.<dossier>, ficheAEnvoyer, modeles, affaires, sansProjet).
+  (config, projet, projets, fiche.<dossier>, ficheAEnvoyer, modeles, affaires, sansProjet, mode, chantiersDrive, masques).
 - **Mode Émergence (v13)** : choisi à la création du chantier (« Type d'étude » : EINS / Émergence), gardé dans le projet (`mode`)
   et dans `photoEins.mode` pour « Sans projet ». Types photo (`TYPES_EMERGENCE`) : `calibration-avant`, `calibration-apres`,
   `equipement-1..4` (+ marque et modèle), `plaque`, `voisin`, `voisin-2`, `point-limite`, `plan`, `meteo`, `autre-<description>`.
@@ -75,6 +77,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
   v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
   v12.2 : bouton « Micro du limiteur » déplacé dans Régie (nom de fichier inchangé : `micro-limiteur`).
+- v14 : chantiers partagés entre téléphones (même lien de script) : « Reprendre un chantier » fusionne la liste du téléphone et les chantiers du Drive des 30 derniers jours (☁︎) ; 🗑 sur un chantier ☁︎ = masqué sur ce téléphone seulement (`photoEins.masques`). La fiche est récupérée du Drive à la reprise d'un chantier et à l'ouverture de la fiche, si elle est plus récente et sans modification locale en attente. Nécessite Code.gs v14 (actions chantiers et fiche).
 - v13.5 : fiche EINS : « Ambiant (nombre de zones sonorisées) » (`zones`, choix 1 à 4), `nb_defavorable` (1 à 4), `nb_limiteur` (0 à 4). Séquences générées : 1 zone → `seq_ambiant` ; N zones → `seq_ambiant_z1..zN` + `seq_ambiant_tout` ; `seq_defavorable`, `seq_defavorable_2…` ; `seq_limiteur`, `seq_limiteur_2…`. Les séquences d'un nombre réduit ensuite restent dans la fiche (non affichées).
 - v13.4 : distance du voisin masquée dans la fiche EINS, calculée seule depuis le GPS (gps_voisin ↔ gps_etablissement ; en émergence gps_point ↔ gps_source) et enregistrée dans `distance` (+ `distance_origine` = « GPS »). Absente si une des deux positions manque.
 - v13.3 : bouton 🗑 dans « Reprendre un chantier » (retire le chantier de l'appli seulement, refusé si photo ou fiche non envoyée ; rien n'est effacé du Drive). Libellé du champ `portes` : « Portes de l’établissement pendant l’étude… » (id et valeurs inchangés).
