@@ -302,7 +302,7 @@
   <p class="vide" id="vide">Touche un type ci-dessus pour prendre la première photo.</p>
   <ul class="envois" id="envois"></ul>
   <button type="button" class="reafficher" id="reafficher"></button>
-  <p class="version">Version 13.4 – Terrain EINS (distance calculée, masquée)</p>
+  <p class="version">Version 13.5 – Terrain EINS (séquences par zone et par point)</p>
 </main>
 
 <!-- Marque et modèle / description -->
@@ -1175,11 +1175,12 @@
 
   /* ---------- Fiche terrain (envoyée dans le dossier du chantier : fiche_terrain.json) ---------- */
   const CHAMPS_FICHE = [
-    { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'rempli seul avec les séquences ci-dessous, ou ex. 22h00-00h00', requis: true },
+    { id: 'horaires', libelle: 'Horaires de mesure', type: 'texte', aide: 'rempli seul par les séquences', requis: true },
+    { id: 'zones', libelle: 'Ambiant (nombre de zones sonorisées)', type: 'choix', options: ['1', '2', '3', '4'], requis: true },
+    { id: 'nb_defavorable', libelle: 'Nombre de points défavorables', type: 'choix', options: ['1', '2', '3', '4'] },
+    { id: 'nb_limiteur', libelle: 'Nombre de points limiteurs', type: 'choix', options: ['0', '1', '2', '3', '4'] },
     { id: 'seq_residuel', libelle: 'Résiduel (musique coupée)', type: 'plage' },
-    { id: 'seq_ambiant', libelle: 'Ambiant chez le voisin (musique)', type: 'plage' },
-    { id: 'seq_defavorable', libelle: 'Point défavorable', type: 'plage' },
-    { id: 'seq_limiteur', libelle: 'Point limiteur', type: 'plage' },
+    { id: '__sequences__' },   // remplacé par les séquences ambiant / défavorable / limiteur (voir sequencesEins)
     { id: 'lieu', libelle: 'Lieu (plusieurs choix possibles si plusieurs zones)', type: 'multi', options: ['clos', 'ouvert'], requis: true },
     { id: 'zone_close', libelle: 'Zone close', type: 'texte', aide: 'ex. salle intérieure', requis: true, si: (f) => lieuMixte(f) },
     { id: 'zone_ouverte', libelle: 'Zone ouverte', type: 'texte', aide: 'ex. terrasse, jardin', requis: true, si: (f) => lieuMixte(f) },
@@ -1193,7 +1194,6 @@
     { id: 'fenetre', libelle: 'Fenêtre du voisin', type: 'choix', options: ['ouverte', 'fermée'], requis: true },
     { id: 'audible', libelle: 'Musique audible chez le voisin ?', type: 'choix', options: ['oui', 'non'], requis: true },
     { id: 'sono', libelle: 'Sonorisation', type: 'choix', options: ['fixe', 'matériel DJ / musiciens', 'les deux'], requis: true },
-    { id: 'zones', libelle: 'Nombre de zones sonorisées', type: 'nombre', requis: true },
     // Valeur enregistrée : « non », « oui » ou la marque + modèle (comme avant)
     { id: 'limiteur', libelle: 'Limiteur existant', type: 'ouiMarque', aide: 'marque et modèle, si tu les connais', requis: true },
     { id: 'capacite', libelle: 'Capacité > 300 personnes ?', type: 'choix', options: ['oui', 'non', 'inconnue'] },
@@ -1233,7 +1233,26 @@
     const ch = [...$('ficheChamps').querySelectorAll('input')].find((i) => i.dataset.id === 'horaires');
     if (ch) ch.value = etat.fiche.horaires;
   }
-  function champsFiche() { return modeActuel() === 'emergence' ? CHAMPS_EMERGENCE : CHAMPS_FICHE; }
+  /* Séquences EINS selon les nombres choisis :
+     ambiant : 1 zone → seq_ambiant ; N zones → seq_ambiant_z1..zN + seq_ambiant_tout (toutes zones ensemble)
+     défavorable : seq_defavorable, seq_defavorable_2… ; limiteur : seq_limiteur, seq_limiteur_2… (0 = aucun) */
+  function sequencesEins(f) {
+    const n = (v, d) => { const x = parseInt(v, 10); return isNaN(x) ? d : Math.max(0, Math.min(4, x)); };
+    const z = Math.max(1, n(f.zones, 1)), d = Math.max(1, n(f.nb_defavorable, 1)), l = n(f.nb_limiteur, 1);
+    const out = [];
+    if (z === 1) out.push({ id: 'seq_ambiant', libelle: 'Ambiant chez le voisin (musique)', type: 'plage' });
+    else {
+      for (let i = 1; i <= z; i++) out.push({ id: 'seq_ambiant_z' + i, libelle: 'Ambiant – zone ' + i + ' seule', type: 'plage' });
+      out.push({ id: 'seq_ambiant_tout', libelle: 'Ambiant – toutes les zones ensemble', type: 'plage' });
+    }
+    for (let i = 1; i <= d; i++) out.push({ id: i === 1 ? 'seq_defavorable' : 'seq_defavorable_' + i, libelle: d === 1 ? 'Point défavorable' : 'Point défavorable ' + i, type: 'plage' });
+    for (let i = 1; i <= l; i++) out.push({ id: i === 1 ? 'seq_limiteur' : 'seq_limiteur_' + i, libelle: l === 1 ? 'Point limiteur' : 'Point limiteur ' + i, type: 'plage' });
+    return out;
+  }
+  function champsFiche() {
+    if (modeActuel() === 'emergence') return CHAMPS_EMERGENCE;
+    return CHAMPS_FICHE.flatMap((c) => c.id === '__sequences__' ? sequencesEins(etat.fiche || {}) : [c]);
+  }
   etat.fiche = {};
 
   function cleFiche() { const p = projetActif(); return p ? p.dossier : jourChantierMaintenant(); }
@@ -1335,7 +1354,7 @@
           b.addEventListener('click', () => {
             etat.fiche[c.id] = etat.fiche[c.id] === o ? '' : o;
             [...puces.children].forEach((x) => x.setAttribute('aria-pressed', x.textContent === etat.fiche[c.id]));
-            if (champsFiche().some((x) => x.si)) {   // affiche ou masque les champs qui dépendent de ce choix
+            {   // affiche ou masque les champs qui dépendent de ce choix (champs « si », séquences EINS)
               const haut = $('ficheChamps').closest('.feuille').scrollTop;
               construireFiche();
               $('ficheChamps').closest('.feuille').scrollTop = haut;

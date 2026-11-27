@@ -39,7 +39,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   `micro-limiteur`, `calibration-avant`, `calibration-apres`, `enceinte-1..4`, `caisson-1..2`, `table-mixage`, `ampli-1..2`,
   `plan`, `autre-<description>`. (`facade` a été retiré en v10, mais il existe dans d'anciens dossiers.)
 - Fiche (`CHAMPS_FICHE`) : horaires (rempli seul depuis les séquences tant qu'il n'est pas saisi à la main, `horairesAuto`),
-  seq_residuel, seq_ambiant, seq_defavorable, seq_limiteur (v13.2, « 22h05-22h20 », bouton unique ▶ Début / ■ Fin), lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
+  seq_residuel, seq_ambiant (ou seq_ambiant_z1..zN + seq_ambiant_tout), seq_defavorable(_2..4), seq_limiteur(_2..4) (v13.2/13.5, « 22h05-22h20 », bouton unique ▶ Début / ■ Fin), lieu (« clos », « ouvert » ou « clos, ouvert »), zone_close et zone_ouverte (seulement si les deux
   sont cochés), portes, voisin, distance, gps_voisin, deux_voisins (« oui » / « non », mis à « oui » par la photo Voisin 2),
   gps_voisin_2 (visible si deux_voisins = « oui »), gps_etablissement, piece, fenetre, audible,
   sono, zones, limiteur (« non », « oui » ou marque + modèle), capacite, ouverture, remarques, maj. Champs ajoutés automatiquement : affaire_crm, affaire_nom, affaire_date_intervention (choix dans le CRM).
@@ -75,6 +75,7 @@ Script Google Apps Script « Photo EINS » (compte liza@french-acoustics.com). `
   cliquable, limiteur en non / oui + marque, fiche avec un seul bouton, « Choisir un chantier », barre sombre, délai d'envoi de la fiche.
   v12.1 : question « 2e voisin ? » (oui / non) dans la fiche, qui affiche la position GPS du voisin 2.
   v12.2 : bouton « Micro du limiteur » déplacé dans Régie (nom de fichier inchangé : `micro-limiteur`).
+- v13.5 : fiche EINS : « Ambiant (nombre de zones sonorisées) » (`zones`, choix 1 à 4), `nb_defavorable` (1 à 4), `nb_limiteur` (0 à 4). Séquences générées : 1 zone → `seq_ambiant` ; N zones → `seq_ambiant_z1..zN` + `seq_ambiant_tout` ; `seq_defavorable`, `seq_defavorable_2…` ; `seq_limiteur`, `seq_limiteur_2…`. Les séquences d'un nombre réduit ensuite restent dans la fiche (non affichées).
 - v13.4 : distance du voisin masquée dans la fiche EINS, calculée seule depuis le GPS (gps_voisin ↔ gps_etablissement ; en émergence gps_point ↔ gps_source) et enregistrée dans `distance` (+ `distance_origine` = « GPS »). Absente si une des deux positions manque.
 - v13.3 : bouton 🗑 dans « Reprendre un chantier » (retire le chantier de l'appli seulement, refusé si photo ou fiche non envoyée ; rien n'est effacé du Drive). Libellé du champ `portes` : « Portes de l’établissement pendant l’étude… » (id et valeurs inchangés).
 - v13.2 : séquences EINS (résiduel, ambiant, défavorable, limiteur) et bouton unique lecture / arrêt dans les deux modes.
